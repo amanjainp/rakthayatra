@@ -19,7 +19,7 @@
     "moduleResolution": "node",
     "baseUrl": "./",
     "paths": {
-      "*": ["node_modules/*", "src/*"]
+      "@/*": ["src/*"]
     },
     "esModuleInterop": true,
     "experimentalDecorators": true,

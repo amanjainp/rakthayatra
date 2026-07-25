@@ -1,0 +1,292 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+}
+
+enum BloodGroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+}
+
+enum RequestUrgency {
+  NORMAL
+  EMERGENCY
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  FULFILLED
+  CANCELLED
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  RESERVED
+  EXPIRED
+  DISTRIBUTED
+}
+
+enum DonationStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  EMERGENCY_ALERT
+  REQUEST_UPDATE
+  DONATION_REMINDER
+  LOW_INVENTORY
+}
+
+enum CampStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model Role {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  permissions String[]
+  users       User[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String
+  roleId           String
+  role             Role              @relation(fields: [roleId], references: [id])
+  status           UserStatus        @default(ACTIVE)
+  deletedAt        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  
+  donorProfile     DonorProfile?
+  hospitalProfile  HospitalProfile?
+  bloodBankProfile BloodBankProfile?
+  
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  bloodRequests    BloodRequest[]    @relation("UserRequests")
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+model DonorProfile {
+  id                    String              @id @default(uuid())
+  userId                String              @unique
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName              String
+  gender                String
+  dob                   DateTime
+  phone                 String              @unique
+  bloodGroup            BloodGroup
+  address               String
+  latitude              Float
+  longitude             Float
+  lastDonationDate      DateTime?
+  isAvailable           Boolean             @default(true)
+  consentGiven          Boolean             @default(false)
+  consentDate           DateTime?
+  requestsNotifiedCount Int                 @default(0)
+  requestsAcceptedCount Int                 @default(0)
+  deletedAt             DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  eligibility           MedicalEligibility?
+  donations             Donation[]
+  donationCampId        String?
+  donationCamp          DonationCamp?       @relation(fields: [donationCampId], references: [id], onDelete: SetNull)
+
+  @@index([latitude, longitude])
+  @@index([bloodGroup, isAvailable])
+}
+
+model MedicalEligibility {
+  id               String       @id @default(uuid())
+  donorProfileId   String       @unique
+  donor            DonorProfile @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
+  answers          Json
+  isEligible       Boolean      @default(true)
+  nextEligibleDate DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model HospitalProfile {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  licenseNumber String    @unique
+  phone         String
+  address       String
+  city          String
+  latitude      Float
+  longitude     Float
+  isVerified    Boolean   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([latitude, longitude])
+}
+
+model BloodBankProfile {
+  id            String           @id @default(uuid())
+  userId        String           @unique
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  licenseNumber String           @unique
+  phone         String
+  address       String
+  city          String
+  latitude      Float
+  longitude     Float
+  isVerified    Boolean          @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  
+  inventory     BloodInventory[]
+  donations     Donation[]
+
+  @@index([latitude, longitude])
+}
+
+model BloodInventory {
+  id          String           @id @default(uuid())
+  bloodBankId String
+  bloodBank   BloodBankProfile @relation(fields: [bloodBankId], references: [id], onDelete: Cascade)
+  bloodGroup  BloodGroup
+  unitsCount  Int
+  expiryDate  DateTime
+  status      InventoryStatus  @default(AVAILABLE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([bloodBankId])
+  @@index([bloodGroup, status])
+}
+
+model BloodRequest {
+  id            String         @id @default(uuid())
+  requesterId   String
+  requester     User           @relation("UserRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  bloodGroup    BloodGroup
+  unitsRequired Int
+  urgency       RequestUrgency @default(NORMAL)
+  status        RequestStatus  @default(PENDING)
+  locationName  String
+  latitude      Float
+  longitude     Float
+  message       String?
+  expiresAt     DateTime
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([latitude, longitude])
+  @@index([bloodGroup, status])
+}
+
+model Donation {
+  id             String            @id @default(uuid())
+  donorProfileId String
+  donor          DonorProfile      @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
+  bloodBankId    String?
+  bloodBank      BloodBankProfile? @relation(fields: [bloodBankId], references: [id], onDelete: SetNull)
+  donationCampId String?
+  donationCamp   DonationCamp?     @relation(fields: [donationCampId], references: [id], onDelete: SetNull)
+  donationDate   DateTime          @default(now())
+  unitsDonated   Int
+  status         DonationStatus    @default(PENDING)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([donorProfileId])
+  @@index([bloodBankId])
+  @@index([donationCampId])
+}
+
+model DonationCamp {
+  id        String         @id @default(uuid())
+  name      String
+  organizer String
+  address   String
+  city      String
+  latitude  Float
+  longitude Float
+  startDate DateTime
+  endDate   DateTime
+  status    CampStatus     @default(UPCOMING)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
+  
+  donors    DonorProfile[]
+  donations Donation[]
+
+  @@index([latitude, longitude])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   Json
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

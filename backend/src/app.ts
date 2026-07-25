@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import logger from './config/logger';
+import authRoutes from './routes/auth.routes';
 
 const app = express();
 
@@ -36,7 +37,7 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 // Health Check API
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   logger.info('Health check endpoint requested');
   res.status(200).json({
     success: true,
@@ -60,7 +61,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Global Error Handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled Exception occurred: %O', err);
 
   res.status(500).json({
