@@ -113,7 +113,7 @@ export class AuthController {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Input validation failed.',
-            details: error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+            details: error.issues.map((e: any) => ({ field: e.path.join('.'), message: e.message })),
           },
         });
       }
@@ -162,7 +162,7 @@ export class AuthController {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Input validation failed.',
-            details: error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+            details: error.issues.map((e: any) => ({ field: e.path.join('.'), message: e.message })),
           },
         });
       }
@@ -265,7 +265,7 @@ export class AuthController {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Input validation failed.',
-            details: error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+            details: error.issues.map((e: any) => ({ field: e.path.join('.'), message: e.message })),
           },
         });
       }
@@ -366,7 +366,7 @@ export class AuthController {
           error: {
             code: 'VALIDATION_ERROR',
             message: 'Input validation failed.',
-            details: error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+            details: error.issues.map((e: any) => ({ field: e.path.join('.'), message: e.message })),
           },
         });
       }

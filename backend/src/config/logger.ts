@@ -1,5 +1,6 @@
 import winston from 'winston';
 import path from 'path';
+import { env } from './env';
 
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -9,7 +10,7 @@ const logFormat = winston.format.combine(
 );
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: env.LOG_LEVEL,
   format: logFormat,
   defaultMeta: { service: 'backend-api' },
   transports: [
@@ -23,7 +24,7 @@ const logger = winston.createLogger({
   ],
 });
 
-if (process.env.NODE_ENV !== 'production') {
+if (env.NODE_ENV !== 'production') {
   logger.add(
     new winston.transports.Console({
       format: winston.format.combine(
@@ -37,3 +38,4 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default logger;
+

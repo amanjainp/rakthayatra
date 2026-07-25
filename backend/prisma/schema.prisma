@@ -92,6 +92,7 @@ model User {
   auditLogs        AuditLog[]
   notifications    Notification[]
   bloodRequests    BloodRequest[]    @relation("UserRequests")
+  deviceTokens     DeviceToken[]
 
   @@index([email])
 }
@@ -286,6 +287,16 @@ model AuditLog {
   action    String
   details   Json
   ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
   createdAt DateTime @default(now())
 
   @@index([userId])

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import logger from './config/logger';
 import authRoutes from './routes/auth.routes';
+import healthRoutes from './routes/health.routes';
 
 const app = express();
 
@@ -36,18 +37,10 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
+app.use('/api/auth', authRoutes);
+
 // Health Check API
-app.get('/health', (_req: Request, res: Response) => {
-  logger.info('Health check endpoint requested');
-  res.status(200).json({
-    success: true,
-    data: {
-      status: 'UP',
-      timestamp: new Date().toISOString(),
-      service: 'Rakthayatra API Server',
-    },
-  });
-});
+app.use('/health', healthRoutes);
 
 // 404 Route Catch-all
 app.use((req: Request, res: Response) => {

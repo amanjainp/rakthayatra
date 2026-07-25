@@ -19,7 +19,8 @@
     "moduleResolution": "node",
     "baseUrl": "./",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@prisma/client": ["../node_modules/@prisma/client"]
     },
     "esModuleInterop": true,
     "experimentalDecorators": true,

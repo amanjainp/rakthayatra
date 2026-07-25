@@ -1,26 +1,18 @@
-class CacheService {
-  private store = new Map<string, { value: string; expiresAt: number }>();
+import { redisService } from './redis.service';
 
+class CacheService {
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
-    const expiresAt = Date.now() + ttlSeconds * 1000;
-    this.store.set(key, { value, expiresAt });
+    await redisService.set(key, value, ttlSeconds);
   }
 
   async get(key: string): Promise<string | null> {
-    const item = this.store.get(key);
-    if (!item) return null;
-
-    if (Date.now() > item.expiresAt) {
-      this.store.delete(key);
-      return null;
-    }
-
-    return item.value;
+    return redisService.get(key);
   }
 
   async delete(key: string): Promise<void> {
-    this.store.delete(key);
+    await redisService.del(key);
   }
 }
 
 export const cacheService = new CacheService();
+
