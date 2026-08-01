@@ -20,6 +20,10 @@ export default {
           900: '#881337',
         },
       },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        display: ['Outfit', 'sans-serif'],
+      },
     },
   },
   plugins: [],
