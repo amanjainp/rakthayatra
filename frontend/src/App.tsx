@@ -6,6 +6,11 @@ import { RoleProtectedRoute } from './components/RoleProtectedRoute';
 import Landing from './pages/Landing';
 import NotFound from './pages/NotFound';
 import AccessDenied from './pages/AccessDenied';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import VerifyOtp from './pages/VerifyOtp';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // --- STUB PAGE COMPONENTS (To be replaced in subsequent phases) ---
 const StubPage = ({ title }: { title: string }) => (
@@ -17,9 +22,6 @@ const StubPage = ({ title }: { title: string }) => (
   </div>
 );
 
-const LoginStub = () => <StubPage title="Login Authentication" />;
-const RegisterStub = () => <StubPage title="Donor/Hospital Registration" />;
-const VerifyOtpStub = () => <StubPage title="OTP Verification" />;
 const ProfileStub = () => <StubPage title="User Profile Settings" />;
 const AdminDashboardStub = () => <StubPage title="Admin Management Dashboard" />;
 const DonorDashboardStub = () => <StubPage title="Donor Dashboard & Statistics" />;
@@ -41,9 +43,11 @@ function App() {
           
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<LoginStub />} />
-          <Route path="/register" element={<RegisterStub />} />
-          <Route path="/verify-otp" element={<VerifyOtpStub />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/access-denied" element={<AccessDenied />} />
 
           {/* Protected Area Layout */}
