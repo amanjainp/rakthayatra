@@ -1,0 +1,103 @@
+import { PrismaClient } from '@prisma/client';
+
+export interface IBaseRepository<T, CreateInput, UpdateInput> {
+  findById(id: string, tx?: any): Promise<T | null>;
+  create(data: CreateInput, tx?: any): Promise<T>;
+  update(id: string, data: UpdateInput, tx?: any): Promise<T>;
+  delete(id: string, tx?: any): Promise<T>;
+  findPaginated(
+    params: {
+      page?: number;
+      limit?: number;
+      where?: any;
+      orderBy?: any;
+      include?: any;
+    },
+    tx?: any
+  ): Promise<{ items: T[]; total: number }>;
+}
+
+export abstract class BaseRepository<T, CreateInput, UpdateInput>
+  implements IBaseRepository<T, CreateInput, UpdateInput>
+{
+  protected prisma: PrismaClient;
+  protected modelName: string;
+  protected supportsSoftDelete: boolean;
+
+  constructor(prisma: PrismaClient, modelName: string, supportsSoftDelete = false) {
+    this.prisma = prisma;
+    this.modelName = modelName;
+    this.supportsSoftDelete = supportsSoftDelete;
+  }
+
+  protected getModel(tx?: any) {
+    const prismaInstance = tx || this.prisma;
+    return prismaInstance[this.modelName];
+  }
+
+  async findById(id: string, tx?: any): Promise<T | null> {
+    const whereClause: any = { id };
+    if (this.supportsSoftDelete) {
+      whereClause.deletedAt = null;
+    }
+    return this.getModel(tx).findFirst({ where: whereClause });
+  }
+
+  async create(data: CreateInput, tx?: any): Promise<T> {
+    return this.getModel(tx).create({ data });
+  }
+
+  async update(id: string, data: UpdateInput, tx?: any): Promise<T> {
+    return this.getModel(tx).update({
+      where: { id },
+      data,
+    });
+  }
+
+  async delete(id: string, tx?: any): Promise<T> {
+    if (this.supportsSoftDelete) {
+      return this.getModel(tx).update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    }
+    return this.getModel(tx).delete({
+      where: { id },
+    });
+  }
+
+  async findPaginated(
+    params: {
+      page?: number;
+      limit?: number;
+      where?: any;
+      orderBy?: any;
+      include?: any;
+    },
+    tx?: any
+  ): Promise<{ items: T[]; total: number }> {
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const whereClause = { ...params.where };
+    if (this.supportsSoftDelete) {
+      whereClause.deletedAt = null;
+    }
+
+    const [items, total] = await Promise.all([
+      this.getModel(tx).findMany({
+        where: whereClause,
+        orderBy: params.orderBy,
+        include: params.include,
+        skip,
+        take: limit,
+      }),
+      this.getModel(tx).count({
+        where: whereClause,
+      }),
+    ]);
+
+    return { items, total };
+  }
+}

@@ -1,39 +1,22 @@
-import { PrismaClient, User, Role } from '@prisma/client';
+import { PrismaClient, User, Role, Prisma } from '@prisma/client';
+import { BaseRepository, IBaseRepository } from './base.repository';
 
-const prisma = new PrismaClient();
+export interface IUserRepository extends IBaseRepository<User, Prisma.UserCreateInput, Prisma.UserUpdateInput> {
+  findByEmail(email: string, tx?: any): Promise<(User & { role: Role }) | null>;
+}
 
-export class UserRepository {
-  async findById(id: string): Promise<(User & { role: Role }) | null> {
-    return prisma.user.findFirst({
-      where: { id, deletedAt: null },
-      include: { role: true },
-    }) as Promise<(User & { role: Role }) | null>;
+export class UserRepository
+  extends BaseRepository<User, Prisma.UserCreateInput, Prisma.UserUpdateInput>
+  implements IUserRepository
+{
+  constructor(prisma: PrismaClient) {
+    super(prisma, 'user', true); // Supports soft delete
   }
 
-  async findByEmail(email: string): Promise<(User & { role: Role }) | null> {
-    return prisma.user.findFirst({
+  async findByEmail(email: string, tx?: any): Promise<(User & { role: Role }) | null> {
+    return this.getModel(tx).findFirst({
       where: { email, deletedAt: null },
       include: { role: true },
-    }) as Promise<(User & { role: Role }) | null>;
-  }
-
-  async create(data: { email: string; passwordHash: string; roleId: string }): Promise<User> {
-    return prisma.user.create({
-      data,
-    });
-  }
-
-  async update(id: string, data: Partial<Omit<User, 'id' | 'createdAt' | 'updatedAt'>>): Promise<User> {
-    return prisma.user.update({
-      where: { id },
-      data,
-    });
-  }
-
-  async softDelete(id: string): Promise<User> {
-    return prisma.user.update({
-      where: { id },
-      data: { deletedAt: new Date() },
     });
   }
 }
