@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import logger from './config/logger';
 import authRoutes from './routes/auth.routes';
 import healthRoutes from './routes/health.routes';
+import inventoryRoutes from './routes/inventory.routes';
 
 const app = express();
 
@@ -38,6 +39,7 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Health Check API
 app.use('/health', healthRoutes);
