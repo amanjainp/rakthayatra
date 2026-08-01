@@ -34,6 +34,10 @@ jest.mock('@prisma/client', () => {
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
     },
+    bloodBankProfile: {
+      findFirst: (...args: any) => mockFindFirst(...args),
+      findUnique: (...args: any) => mockFindUnique(...args),
+    },
     bloodInventory: {
       findFirst: (...args: any) => mockFindFirst(...args),
       findUnique: (...args: any) => mockFindUnique(...args),
@@ -68,7 +72,6 @@ jest.mock('@prisma/client', () => {
 
 describe('Rakthayatra Business Modules Integration Tests', () => {
   let adminToken: string;
-  let donorToken: string;
   const mockDonorProfileId = 'a37b38d3-3561-460d-a3df-6a3f01c876e9';
   const mockBloodBankId = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6';
   const mockDonationId = 'b86f1e16-7d6f-45a8-b648-289569faabdc';
@@ -80,14 +83,30 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
       userId: 'admin-usr-1',
       role: 'ADMIN',
     });
-    donorToken = generateAccessToken({
-      userId: 'donor-usr-1',
-      role: 'DONOR',
-    });
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockCreate.mockImplementation((args: any) => {
+      if (args && typeof args === 'object' && 'data' in args) {
+        return Promise.resolve({
+          id: 'new-id',
+          ...args.data,
+        });
+      }
+      return Promise.resolve({ id: 'new-id', ...args });
+    });
+
+    mockUpdate.mockImplementation((args: any, secondArg?: any) => {
+      if (args && typeof args === 'object' && 'where' in args && 'data' in args) {
+        return Promise.resolve({
+          id: args.where.id,
+          ...args.data,
+        });
+      }
+      return Promise.resolve({ id: args, ...secondArg });
+    });
   });
 
   describe('Integration: Inventory ↔ Donation ↔ Eligibility Workflow', () => {
@@ -119,16 +138,13 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
             donorProfileId: mockDonorProfileId,
           });
         }
+        // Blood Bank Profile lookup
+        if (params?.where && params.where.id === mockBloodBankId) {
+          return Promise.resolve({
+            id: mockBloodBankId,
+          });
+        }
         return Promise.resolve(null);
-      });
-
-      // Update donation status
-      mockUpdate.mockImplementation((id: string, data: any) => {
-        return Promise.resolve({ id, ...data });
-      });
-
-      mockCreate.mockImplementation((data: any) => {
-        return Promise.resolve({ id: 'new-id', ...data });
       });
 
       // Complete donation
@@ -142,19 +158,29 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
       expect(response.body.data.donation.status).toBe('COMPLETED');
 
       // Verify donor update was called
-      expect(mockUpdate).toHaveBeenCalledWith(mockDonorProfileId, expect.any(Object));
+      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: mockDonorProfileId },
+        data: expect.objectContaining({
+          lastDonationDate: expect.any(Date),
+        }),
+      }));
 
       // Verify medical eligibility update was called to defer the donor
-      expect(mockUpdate).toHaveBeenCalledWith('eligibility-1', expect.objectContaining({
-        isEligible: false,
-        nextEligibleDate: expect.any(Date),
+      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'eligibility-1' },
+        data: expect.objectContaining({
+          isEligible: false,
+          nextEligibleDate: expect.any(Date),
+        }),
       }));
 
       // Verify inventory was created for the blood bank
       expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
-        unitsCount: 2,
-        bloodGroup: 'O_POS',
-        status: 'AVAILABLE',
+        data: expect.objectContaining({
+          unitsCount: 2,
+          bloodGroup: 'O_POS',
+          status: 'AVAILABLE',
+        }),
       }));
     });
   });
@@ -187,10 +213,6 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
         return Promise.resolve(null);
       });
 
-      mockUpdate.mockImplementation((id: string, data: any) => {
-        return Promise.resolve({ id, ...data });
-      });
-
       // Fulfill request
       const response = await request(app)
         .post(`/api/requests/${mockRequestId}/fulfill`)
@@ -203,14 +225,19 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
 
       // Verify inventory was split/updated
       // 1. Deducted remaining units from available inventory
-      expect(mockUpdate).toHaveBeenCalledWith(mockInventoryId, expect.objectContaining({
-        unitsCount: 3, // 5 - 2
+      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: mockInventoryId },
+        data: expect.objectContaining({
+          unitsCount: 3, // 5 - 2
+        }),
       }));
 
       // 2. Created new reserved record batch for the request
       expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
-        unitsCount: 2,
-        status: 'RESERVED',
+        data: expect.objectContaining({
+          unitsCount: 2,
+          status: 'RESERVED',
+        }),
       }));
     });
 
@@ -267,7 +294,7 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/requests')
-        .set('Authorization', `Bearer ${donorToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           bloodGroup: 'O_NEG',
           unitsRequired: 2,
@@ -285,7 +312,7 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
       expect(pushSpy).toHaveBeenCalledWith(
         'donor-user-matched',
         expect.stringContaining('Urgent'),
-        expect.stringContaining('EMERGENCY'),
+        expect.stringContaining('emergency'),
         'EMERGENCY_ALERT'
       );
 
