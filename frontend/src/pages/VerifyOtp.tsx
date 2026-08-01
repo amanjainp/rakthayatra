@@ -10,6 +10,7 @@ import { z } from 'zod';
 import AuthLayout from '../layouts/AuthLayout';
 import { Loader } from '../components/Loader';
 import { ROLE_DASHBOARDS } from '../constants';
+import { Role } from '../types';
 
 type OtpFormInputs = z.infer<typeof otpSchema>;
 
@@ -40,7 +41,7 @@ export const VerifyOtp: React.FC = () => {
       const response = await verifyOtp(email, data.otp);
       toast.success('Account verified successfully!');
       
-      const role = response.data?.user?.role || 'DONOR';
+      const role = (response.data?.user?.role as Role) || 'DONOR';
       navigate(ROLE_DASHBOARDS[role] || '/', { replace: true });
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || 'OTP verification failed. Please try again.';

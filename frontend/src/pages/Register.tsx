@@ -23,7 +23,6 @@ export const Register: React.FC = () => {
     register: formRegister,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<RegisterFormInputs>({
     resolver: zodResolver(registerSchema),
