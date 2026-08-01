@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 import { bloodRequestService } from '../services/blood-request.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
