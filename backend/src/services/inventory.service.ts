@@ -1,9 +1,9 @@
-import { PrismaClient, BloodInventory, Prisma, BloodGroup, InventoryStatus } from '@prisma/client';
+import { PrismaClient, BloodInventory, BloodGroup, InventoryStatus } from '@prisma/client';
 import { InventoryRepository } from '../repositories/inventory.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { BloodBankRepository } from '../repositories/blood-bank.repository';
 import { redisService } from './redis.service';
-import { BadRequestError, NotFoundError, InternalServerError } from '../errors/app-error';
+import { BadRequestError, NotFoundError } from '../errors/app-error';
 import logger from '../config/logger';
 
 const prisma = new PrismaClient();

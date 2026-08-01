@@ -8,9 +8,7 @@ import logger from '../config/logger';
 // Zod Validation Schemas
 const registerSchema = z.object({
   bloodBankId: z.string().uuid('Invalid blood bank ID format.'),
-  bloodGroup: z.enum(['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG', 'O_POS', 'O_NEG'], {
-    errorMap: () => ({ message: 'Invalid blood group type.' }),
-  }),
+  bloodGroup: z.enum(['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG', 'O_POS', 'O_NEG']),
   unitsCount: z.number().int().positive('Units count must be a positive integer.'),
   expiryDate: z.string().refine((val) => !isNaN(Date.parse(val)), {
     message: 'Expiry date must be a valid date string.',
@@ -76,7 +74,7 @@ export class InventoryController {
           unitsCount: parsed.unitsCount,
           expiryDate: new Date(parsed.expiryDate),
         },
-        req.user?.id
+        req.user?.userId
       );
 
       return res.status(201).json({
@@ -100,7 +98,7 @@ export class InventoryController {
           inventoryId: parsed.inventoryId,
           unitsToReserve: parsed.unitsToReserve,
         },
-        req.user?.id
+        req.user?.userId
       );
 
       return res.status(200).json({
@@ -123,7 +121,7 @@ export class InventoryController {
         throw new BadRequestError('Invalid inventory batch ID parameter.');
       }
 
-      const released = await inventoryService.releaseUnits(id, req.user?.id);
+      const released = await inventoryService.releaseUnits(id, req.user?.userId);
 
       return res.status(200).json({
         success: true,
@@ -163,7 +161,7 @@ export class InventoryController {
    */
   async triggerExpiryCheck(req: AuthenticatedRequest, res: Response) {
     try {
-      const updated = await inventoryService.checkAndFlagExpiredUnits(req.user?.id);
+      const updated = await inventoryService.checkAndFlagExpiredUnits(req.user?.userId);
 
       return res.status(200).json({
         success: true,

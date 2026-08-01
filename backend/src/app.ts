@@ -6,6 +6,8 @@ import logger from './config/logger';
 import authRoutes from './routes/auth.routes';
 import healthRoutes from './routes/health.routes';
 import inventoryRoutes from './routes/inventory.routes';
+import donationRoutes from './routes/donation.routes';
+import bloodRequestRoutes from './routes/blood-request.routes';
 
 const app = express();
 
@@ -40,6 +42,8 @@ app.use(globalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/donations', donationRoutes);
+app.use('/api/requests', bloodRequestRoutes);
 
 // Health Check API
 app.use('/health', healthRoutes);
