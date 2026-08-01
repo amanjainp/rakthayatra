@@ -9,6 +9,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import donationRoutes from './routes/donation.routes';
 import bloodRequestRoutes from './routes/blood-request.routes';
 import medicalEligibilityRoutes from './routes/medical-eligibility.routes';
+import donationCampRoutes from './routes/donation-camp.routes';
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/requests', bloodRequestRoutes);
 app.use('/api/eligibility', medicalEligibilityRoutes);
+app.use('/api/camps', donationCampRoutes);
 
 // Health Check API
 app.use('/health', healthRoutes);
