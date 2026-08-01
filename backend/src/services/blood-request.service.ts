@@ -2,7 +2,11 @@ import { PrismaClient, BloodRequest, RequestUrgency, RequestStatus, BloodGroup }
 import { BloodRequestRepository } from '../repositories/blood-request.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
+import { InventoryRepository } from '../repositories/inventory.repository';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
+import { BLOOD_COMPATIBILITY } from '../constants/app.constants';
+import { mapsService } from './maps.service';
+import { firebaseService } from './firebase.service';
 import logger from '../config/logger';
 
 const prisma = new PrismaClient();
@@ -39,6 +43,9 @@ export class BloodRequestService {
     } else {
       expiresAt.setDate(expiresAt.getDate() + 7);
     }
+
+    // Capture matching donors to alert later (outside of transaction lock)
+    let donorsToNotify: string[] = [];
 
     const request = await prisma.$transaction(async (tx) => {
       const requestRepo = new BloodRequestRepository(tx as any);
@@ -77,8 +84,67 @@ export class BloodRequestService {
         },
       });
 
+      // Request ↔ Donation Integration: If EMERGENCY, match nearby donors
+      if (data.urgency === 'EMERGENCY') {
+        const compatibleGroups = BLOOD_COMPATIBILITY[data.bloodGroup];
+
+        // Optimized bounding box search to utilize spatial indices
+        const latDiff = 50 / 111.0; // ~50km in latitude degrees
+        const lonDiff = 50 / (111.0 * Math.cos(data.latitude * Math.PI / 180));
+
+        const minLat = data.latitude - latDiff;
+        const maxLat = data.latitude + latDiff;
+        const minLon = data.longitude - Math.abs(lonDiff);
+        const maxLon = data.longitude + Math.abs(lonDiff);
+
+        // Fetch candidates using bounding box query
+        const candidates = await tx.donorProfile.findMany({
+          where: {
+            isAvailable: true,
+            deletedAt: null,
+            bloodGroup: { in: compatibleGroups },
+            latitude: { gte: minLat, lte: maxLat },
+            longitude: { gte: minLon, lte: maxLon },
+          },
+          select: {
+            userId: true,
+            latitude: true,
+            longitude: true,
+          },
+        });
+
+        // Exact distance check using Haversine
+        for (const candidate of candidates) {
+          const distance = mapsService.calculateDistance(
+            data.latitude,
+            data.longitude,
+            candidate.latitude,
+            candidate.longitude
+          );
+          if (distance <= 50) {
+            donorsToNotify.push(candidate.userId);
+          }
+        }
+      }
+
       return record;
     });
+
+    // Alert matching donors asynchronously
+    if (donorsToNotify.length > 0) {
+      Promise.all(
+        donorsToNotify.map((donorUserId) =>
+          firebaseService
+            .sendPushNotification(
+              donorUserId,
+              'Urgent Blood Donation Required!',
+              `An emergency request for blood group ${data.bloodGroup} has been made near you. Please check your eligibility and donate!`,
+              'EMERGENCY_ALERT'
+            )
+            .catch((err) => logger.warn(`Failed to alert matching donor ${donorUserId}: ${err.message}`))
+        )
+      );
+    }
 
     return request;
   }
@@ -89,11 +155,13 @@ export class BloodRequestService {
   async updateRequestStatus(
     requestId: string,
     newStatus: RequestStatus,
-    userId?: string
+    userId?: string,
+    inventoryId?: string
   ): Promise<BloodRequest> {
     const updated = await prisma.$transaction(async (tx) => {
       const requestRepo = new BloodRequestRepository(tx as any);
       const auditLogRepo = new AuditLogRepository(tx as any);
+      const inventoryRepo = new InventoryRepository(tx as any);
 
       const requestRecord = await requestRepo.findById(requestId);
       if (!requestRecord) {
@@ -110,6 +178,63 @@ export class BloodRequestService {
       } else if (newStatus === 'FULFILLED') {
         if (currentStatus !== 'APPROVED') {
           throw new BadRequestError(`Cannot fulfill a request with status: ${currentStatus}`);
+        }
+
+        // Request ↔ Inventory Integration: Fulfill logic reserves/allocates blood units
+        const compatibleGroups = BLOOD_COMPATIBILITY[requestRecord.bloodGroup];
+        let targetInventory: any;
+
+        if (inventoryId) {
+          targetInventory = await tx.bloodInventory.findUnique({
+            where: { id: inventoryId },
+          });
+          if (!targetInventory) {
+            throw new NotFoundError('Target blood inventory item not found.');
+          }
+          if (targetInventory.status !== 'AVAILABLE') {
+            throw new BadRequestError(`Target inventory item status is not AVAILABLE: ${targetInventory.status}`);
+          }
+          if (!compatibleGroups.includes(targetInventory.bloodGroup)) {
+            throw new BadRequestError(
+              `Target inventory blood group ${targetInventory.bloodGroup} is not compatible with request blood group ${requestRecord.bloodGroup}`
+            );
+          }
+          if (targetInventory.unitsCount < requestRecord.unitsRequired) {
+            throw new BadRequestError(
+              `Target inventory has insufficient units: ${targetInventory.unitsCount} available, ${requestRecord.unitsRequired} required.`
+            );
+          }
+        } else {
+          // Automatic matching of compatible available units
+          targetInventory = await tx.bloodInventory.findFirst({
+            where: {
+              status: 'AVAILABLE',
+              bloodGroup: { in: compatibleGroups },
+              unitsCount: { gte: requestRecord.unitsRequired },
+            },
+          });
+          if (!targetInventory) {
+            throw new BadRequestError('No compatible blood units available in inventory to fulfill this request.');
+          }
+        }
+
+        // Allocate units (using split if partial allocation is needed)
+        if (targetInventory.unitsCount === requestRecord.unitsRequired) {
+          await inventoryRepo.update(targetInventory.id, {
+            status: 'RESERVED',
+          });
+        } else {
+          const remaining = targetInventory.unitsCount - requestRecord.unitsRequired;
+          await inventoryRepo.update(targetInventory.id, {
+            unitsCount: remaining,
+          });
+          await inventoryRepo.create({
+            bloodBank: { connect: { id: targetInventory.bloodBankId } },
+            bloodGroup: targetInventory.bloodGroup,
+            unitsCount: requestRecord.unitsRequired,
+            expiryDate: targetInventory.expiryDate,
+            status: 'RESERVED',
+          });
         }
       } else if (newStatus === 'CANCELLED') {
         if (currentStatus !== 'PENDING' && currentStatus !== 'APPROVED') {
@@ -130,6 +255,7 @@ export class BloodRequestService {
           requestId,
           previousStatus: currentStatus,
           newStatus,
+          inventoryFulfillmentId: inventoryId || undefined,
         },
       });
 

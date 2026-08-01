@@ -20,6 +20,9 @@ jest.mock('@prisma/client', () => {
     role: {
       findFirst: (...args: any) => mockFindFirst(...args),
     },
+    donorProfile: {
+      findMany: (...args: any) => mockFindMany(...args),
+    },
     bloodRequest: {
       findFirst: (...args: any) => mockFindFirst(...args),
       findUnique: (...args: any) => mockFindUnique(...args),
@@ -63,6 +66,7 @@ describe('Blood Request Module API Endpoint Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFindMany.mockResolvedValue([]);
   });
 
   describe('POST /api/requests (Create Request)', () => {

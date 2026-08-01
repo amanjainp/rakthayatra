@@ -148,7 +148,12 @@ export class BloodRequestController {
         throw new BadRequestError('Invalid blood request ID parameter.');
       }
 
-      const fulfilled = await bloodRequestService.updateRequestStatus(id, 'FULFILLED', req.user?.userId);
+      const inventoryId = req.body.inventoryId || req.query.inventoryId;
+      if (inventoryId && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(inventoryId)) {
+        throw new BadRequestError('Invalid blood inventory ID parameter.');
+      }
+
+      const fulfilled = await bloodRequestService.updateRequestStatus(id, 'FULFILLED', req.user?.userId, inventoryId);
 
       return res.status(200).json({
         success: true,
