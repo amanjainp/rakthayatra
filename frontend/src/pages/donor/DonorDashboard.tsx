@@ -24,7 +24,7 @@ export const DonorDashboard: React.FC = () => {
         </div>
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white font-display">Donor Dashboard</h2>
-          <p className="text-xs text-slate-400">Welcome back, {user?.name || 'Donor'}! Schedule donations and track compatibility requests</p>
+          <p className="text-xs text-slate-400">Welcome back, {user?.fullName || 'Donor'}! Schedule donations and track compatibility requests</p>
         </div>
       </div>
 

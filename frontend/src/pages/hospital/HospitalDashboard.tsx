@@ -24,7 +24,7 @@ export const HospitalDashboard: React.FC = () => {
         </div>
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white font-display">Hospital Logistics</h2>
-          <p className="text-xs text-slate-400">Welcome back, {user?.name || 'Hospital Facility'}! Check active reservations and request compatible stocks</p>
+          <p className="text-xs text-slate-400">Welcome back, {user?.fullName || 'Hospital Facility'}! Check active reservations and request compatible stocks</p>
         </div>
       </div>
 

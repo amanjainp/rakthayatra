@@ -24,7 +24,7 @@ export const BloodBankDashboard: React.FC = () => {
         </div>
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white font-display">Blood Bank Portal</h2>
-          <p className="text-xs text-slate-400">Welcome back, {user?.name || 'Blood Bank'}! Settle stock records and scan allocations</p>
+          <p className="text-xs text-slate-400">Welcome back, {user?.fullName || 'Blood Bank'}! Settle stock records and scan allocations</p>
         </div>
       </div>
 

@@ -24,7 +24,7 @@ export const PatientDashboard: React.FC = () => {
         </div>
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white font-display">Patient Portal</h2>
-          <p className="text-xs text-slate-400">Welcome back, {user?.name || 'Patient'}! File blood requests and monitor compatibility matches</p>
+          <p className="text-xs text-slate-400">Welcome back, {user?.fullName || 'Patient'}! File blood requests and monitor compatibility matches</p>
         </div>
       </div>
 
