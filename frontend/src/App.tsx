@@ -11,6 +11,11 @@ import Register from './pages/Register';
 import VerifyOtp from './pages/VerifyOtp';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import DonorDashboard from './pages/donor/DonorDashboard';
+import PatientDashboard from './pages/patient/PatientDashboard';
+import HospitalDashboard from './pages/hospital/HospitalDashboard';
+import BloodBankDashboard from './pages/bloodbank/BloodBankDashboard';
 
 // --- STUB PAGE COMPONENTS (To be replaced in subsequent phases) ---
 const StubPage = ({ title }: { title: string }) => (
@@ -23,11 +28,6 @@ const StubPage = ({ title }: { title: string }) => (
 );
 
 const ProfileStub = () => <StubPage title="User Profile Settings" />;
-const AdminDashboardStub = () => <StubPage title="Admin Management Dashboard" />;
-const DonorDashboardStub = () => <StubPage title="Donor Dashboard & Statistics" />;
-const PatientDashboardStub = () => <StubPage title="Patient Request Panel" />;
-const HospitalDashboardStub = () => <StubPage title="Hospital Blood Logistics Portal" />;
-const BloodBankDashboardStub = () => <StubPage title="Blood Bank Dashboard" />;
 const InventoryStub = () => <StubPage title="Blood Unit Inventory Management" />;
 const RequestsStub = () => <StubPage title="Emergency Blood Requests Ledger" />;
 const DonationsStub = () => <StubPage title="Donations & Appointments Ledger" />;
@@ -62,7 +62,7 @@ function App() {
                 path="/admin/dashboard"
                 element={
                   <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                    <AdminDashboardStub />
+                    <AdminDashboard />
                   </RoleProtectedRoute>
                 }
               />
@@ -70,7 +70,7 @@ function App() {
                 path="/donor/dashboard"
                 element={
                   <RoleProtectedRoute allowedRoles={['DONOR']}>
-                    <DonorDashboardStub />
+                    <DonorDashboard />
                   </RoleProtectedRoute>
                 }
               />
@@ -78,7 +78,7 @@ function App() {
                 path="/patient/dashboard"
                 element={
                   <RoleProtectedRoute allowedRoles={['PATIENT']}>
-                    <PatientDashboardStub />
+                    <PatientDashboard />
                   </RoleProtectedRoute>
                 }
               />
@@ -86,7 +86,7 @@ function App() {
                 path="/hospital/dashboard"
                 element={
                   <RoleProtectedRoute allowedRoles={['HOSPITAL']}>
-                    <HospitalDashboardStub />
+                    <HospitalDashboard />
                   </RoleProtectedRoute>
                 }
               />
@@ -94,7 +94,7 @@ function App() {
                 path="/blood-bank/dashboard"
                 element={
                   <RoleProtectedRoute allowedRoles={['BLOOD_BANK']}>
-                    <BloodBankDashboardStub />
+                    <BloodBankDashboard />
                   </RoleProtectedRoute>
                 }
               />
