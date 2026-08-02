@@ -137,6 +137,12 @@ jest.mock('@prisma/client', () => {
       update: jest.fn(),
       create: jest.fn(),
     },
+    donation: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      create: jest.fn(),
+    },
     deviceToken: {
       findMany: jest.fn().mockResolvedValue([{ token: 'token-1' }]),
     },
@@ -497,6 +503,127 @@ describe('Backend Coverage booster Tests', () => {
       // Get history
       const history = await medicalEligibilityService.getEligibilityHistory('donor-1');
       expect(history.length).toBe(0);
+    });
+
+    it('should test validation/error pathway branches across other services', async () => {
+      // 1. bloodRequestService
+      prisma.bloodRequest.findUnique.mockResolvedValue({ id: 'req-1', status: 'PENDING' });
+      await expect(bloodRequestService.updateRequestStatus('req-1', 'FULFILLED', 'user-1')).rejects.toThrow();
+
+      prisma.bloodRequest.findUnique.mockResolvedValue({ id: 'req-1', status: 'APPROVED' });
+      await expect(bloodRequestService.updateRequestStatus('req-1', 'APPROVED', 'user-1')).rejects.toThrow();
+
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
+      await expect(bloodRequestService.createRequest({
+        requesterId: 'non-existent',
+        bloodGroup: 'O_NEG',
+        unitsRequired: 5,
+        urgency: 'NORMAL',
+        locationName: 'Delhi',
+        latitude: 28.5,
+        longitude: 77.2
+      })).rejects.toThrow();
+
+      // 2. donationCampService
+      await expect(donationCampService.createCamp({
+        name: 'Camp',
+        organizer: 'Hospital A',
+        address: 'Delhi',
+        city: 'Delhi',
+        startDate: new Date(Date.now() + 200000),
+        endDate: new Date(Date.now() + 100000),
+        latitude: 12,
+        longitude: 77
+      }, 'user-1')).rejects.toThrow();
+
+      prisma.donationCamp.findUnique.mockResolvedValue(null);
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.updateCamp('non-existent', { name: 'Name' }, 'user-1')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1' });
+      prisma.donationCamp.findUnique.mockResolvedValue({ id: 'camp-1' });
+      await expect(donationCampService.updateCamp('camp-1', {
+        startDate: new Date(Date.now() + 200000),
+        endDate: new Date(Date.now() + 100000)
+      })).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      prisma.donationCamp.findUnique.mockResolvedValue(null);
+      await expect(donationCampService.deleteCamp('camp-not-exists')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.registerDonor('camp-not-exists', 'donor-1')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1', status: 'COMPLETED' });
+      await expect(donationCampService.registerDonor('camp-1', 'donor-1')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1', status: 'ACTIVE' });
+      prisma.donorProfile.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.registerDonor('camp-1', 'donor-not-exists')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.associateHospital('camp-not-exists', 'hosp-1')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1' });
+      prisma.hospitalProfile.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.associateHospital('camp-1', 'hosp-not-exists')).rejects.toThrow();
+
+      // 3. donationService
+      prisma.donorProfile.findUnique.mockResolvedValue(null);
+      prisma.donorProfile.findFirst.mockResolvedValue(null);
+      const donationService = require('../src/services/donation.service').donationService;
+      await expect(donationService.registerAppointment({
+        donorProfileId: 'non-existent',
+        donationDate: new Date(),
+        unitsDonated: 5
+      })).rejects.toThrow();
+
+      prisma.donation.findUnique.mockResolvedValue(null);
+      prisma.donation.findFirst.mockResolvedValue(null);
+      await expect(donationService.cancelDonation('non-existent', 'user-1')).rejects.toThrow();
+
+      prisma.donation.findUnique.mockResolvedValue({ id: 'appt-1', status: 'COMPLETED' });
+      prisma.donation.findFirst.mockResolvedValue({ id: 'appt-1', status: 'COMPLETED' });
+      await expect(donationService.cancelDonation('appt-1', 'user-1')).rejects.toThrow();
+
+      // 4. inventoryService
+      prisma.bloodBankProfile.findUnique.mockResolvedValue(null);
+      prisma.bloodBankProfile.findFirst.mockResolvedValue(null);
+      await expect(inventoryService.registerBloodUnit({
+        bloodBankId: 'non-existent',
+        bloodGroup: 'O_NEG',
+        unitsCount: 5,
+        expiryDate: new Date(Date.now() + 100000)
+      })).rejects.toThrow();
+
+      await expect(inventoryService.registerBloodUnit({
+        bloodBankId: 'bank-1',
+        bloodGroup: 'O_NEG',
+        unitsCount: -5,
+        expiryDate: new Date(Date.now() + 100000)
+      })).rejects.toThrow();
+
+      await expect(inventoryService.registerBloodUnit({
+        bloodBankId: 'bank-1',
+        bloodGroup: 'O_NEG',
+        unitsCount: 5,
+        expiryDate: new Date(Date.now() - 100000)
+      })).rejects.toThrow();
+
+      await expect(inventoryService.reserveUnits({ inventoryId: 'batch-1', unitsToReserve: 0 })).rejects.toThrow();
+
+      prisma.bloodInventory.findUnique.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE', unitsCount: 2 });
+      prisma.bloodInventory.findFirst.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE', unitsCount: 2 });
+      await expect(inventoryService.reserveUnits({ inventoryId: 'batch-1', unitsToReserve: 5 })).rejects.toThrow();
+
+      prisma.bloodInventory.findUnique.mockResolvedValue(null);
+      prisma.bloodInventory.findFirst.mockResolvedValue(null);
+      await expect(inventoryService.releaseUnits('non-existent')).rejects.toThrow();
+
+      prisma.bloodInventory.findUnique.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE' });
+      prisma.bloodInventory.findFirst.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE' });
+      await expect(inventoryService.releaseUnits('batch-1')).rejects.toThrow();
     });
   });
 });
