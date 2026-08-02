@@ -18,7 +18,7 @@ export const useMapsLocations = (center: { latitude: number; longitude: number }
     queryFn: async () => {
       try {
         // Query server geocoding endpoints
-        const res = await apiClient.get('/camps').catch(() => null);
+        await apiClient.get('/camps').catch(() => null);
         
         // Mock fallback geocoded markers relative to Noida/Delhi center coords
         return [

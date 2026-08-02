@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMapsLocations, MapMarker } from '../hooks/useMapsLocations';
-import { MapPin, Navigation, Compass, ShieldAlert, Database, Users } from 'lucide-react';
+import { Navigation, Compass, ShieldAlert, Database, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 export const EmergencyMap: React.FC = () => {

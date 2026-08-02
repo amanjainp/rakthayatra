@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { ROLE_DASHBOARDS } from '../constants';
+import { useNotifications } from '../hooks/useNotifications';
 import {
   HomeIcon,
   UserIcon,
@@ -13,6 +14,7 @@ import {
   InboxIcon,
   MapIcon,
   ShieldExclamationIcon,
+  BellIcon,
 } from '@heroicons/react/24/outline';
 
 export const DashboardLayout: React.FC = () => {
@@ -22,6 +24,10 @@ export const DashboardLayout: React.FC = () => {
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isBellOpen, setIsBellOpen] = useState(false);
+
+  const { data: notifications = [], unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const recentNotifs = notifications.slice(0, 3);
 
   const handleLogout = async () => {
     await logout();
@@ -35,6 +41,7 @@ export const DashboardLayout: React.FC = () => {
   const getNavLinks = () => {
     const commonLinks = [
       { name: 'Dashboard', path: ROLE_DASHBOARDS[user?.role || 'DONOR'], icon: HomeIcon },
+      { name: 'Emergency Map', path: '/emergency-map', icon: MapIcon },
       { name: 'Profile', path: '/profile', icon: UserIcon },
     ];
 
@@ -169,6 +176,61 @@ export const DashboardLayout: React.FC = () => {
 
           {/* User Badge Details */}
           <div className="flex items-center space-x-4">
+            {/* Bell notification widget */}
+            <div className="relative">
+              <button
+                onClick={() => setIsBellOpen(!isBellOpen)}
+                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-xl relative focus:outline-none"
+              >
+                <BellIcon className="h-6 w-6" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                )}
+              </button>
+              {isBellOpen && (
+                <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-800 bg-slate-900 shadow-xl overflow-hidden z-50">
+                  <div className="p-4 border-b border-slate-800/80 flex justify-between items-center bg-slate-950/20">
+                    <span className="text-xs font-bold text-white font-display">Notifications ({unreadCount})</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={() => markAllAsRead()}
+                        className="text-[10px] font-bold text-rose-400 hover:text-rose-300 uppercase tracking-wider"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/40">
+                    {recentNotifs.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => {
+                          markAsRead(notif.id);
+                          setIsBellOpen(false);
+                        }}
+                        className={`p-4 cursor-pointer hover:bg-slate-800/30 transition-colors text-left space-y-1 ${
+                          notif.read ? 'opacity-60' : ''
+                        }`}
+                      >
+                        <h4 className="text-xs font-bold text-slate-200 leading-snug">{notif.title}</h4>
+                        <p className="text-[10px] text-slate-400 leading-normal">{notif.body}</p>
+                      </div>
+                    ))}
+                    {recentNotifs.length === 0 && (
+                      <div className="text-center py-6 text-slate-500 text-xs italic">No new alerts.</div>
+                    )}
+                  </div>
+                  <Link
+                    to="/notifications"
+                    onClick={() => setIsBellOpen(false)}
+                    className="block text-center py-3 bg-slate-950/40 text-xs font-bold text-slate-400 hover:text-slate-200 border-t border-slate-800/80"
+                  >
+                    View All Alerts
+                  </Link>
+                </div>
+              )}
+            </div>
+
             <div className="text-right hidden md:block">
               <p className="text-sm font-semibold text-slate-200">{user?.fullName}</p>
               <p className="text-xs text-rose-500 font-bold">{user?.role}</p>

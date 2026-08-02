@@ -23,6 +23,8 @@ import Donations from './pages/Donations';
 import MedicalEligibility from './pages/MedicalEligibility';
 import DonationCamps from './pages/DonationCamps';
 import AdminManagement from './pages/admin/AdminManagement';
+import EmergencyMap from './pages/EmergencyMap';
+import Notifications from './pages/Notifications';
 
 function App() {
   return (
@@ -138,6 +140,8 @@ function App() {
                   </RoleProtectedRoute>
                 }
               />
+              <Route path="/emergency-map" element={<EmergencyMap />} />
+              <Route path="/notifications" element={<Notifications />} />
 
             </Route>
           </Route>
