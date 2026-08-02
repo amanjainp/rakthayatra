@@ -6,6 +6,12 @@ import { FirebaseService } from '../src/services/firebase.service';
 import { RabbitMQService } from '../src/services/rabbitmq.service';
 import { RedisService } from '../src/services/redis.service';
 import { authService } from '../src/services/auth.service';
+import { env } from '../src/config/env';
+import { donationCampService } from '../src/services/donation-camp.service';
+import { donationService } from '../src/services/donation.service';
+import { inventoryService } from '../src/services/inventory.service';
+import { medicalEligibilityService } from '../src/services/medical-eligibility.service';
+import { bloodRequestService } from '../src/services/blood-request.service';
 
 // Mock amqplib
 jest.mock('amqplib', () => ({
@@ -35,6 +41,14 @@ jest.mock('ioredis', () => {
     incr: jest.fn().mockResolvedValue(1),
     expire: jest.fn().mockResolvedValue(1),
     on: jest.fn(),
+    multi: jest.fn().mockReturnValue({
+      incr: jest.fn().mockReturnThis(),
+      expire: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([
+        [null, 1],
+        [null, 1],
+      ]),
+    }),
   }));
 });
 
@@ -59,6 +73,7 @@ jest.mock('@googlemaps/google-maps-services-js', () => ({
   Client: jest.fn().mockImplementation(() => ({
     geocode: jest.fn().mockResolvedValue({
       data: {
+        status: 'OK',
         results: [
           {
             geometry: {
@@ -83,10 +98,30 @@ jest.mock('@prisma/client', () => {
       update: jest.fn(),
     },
     hospitalProfile: {
+      findUnique: jest.fn(),
       create: jest.fn(),
     },
     bloodBankProfile: {
+      findUnique: jest.fn(),
       create: jest.fn(),
+    },
+    donorProfile: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    donationCamp: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    bloodInventory: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+    bloodRequest: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     deviceToken: {
       findMany: jest.fn().mockResolvedValue([{ token: 'token-1' }]),
@@ -134,13 +169,16 @@ jest.mock('@prisma/client', () => {
 describe('Backend Coverage booster Tests', () => {
   beforeAll(() => {
     // Inject mock configurations to cover live paths
-    process.env.REDIS_URL = 'redis://localhost:6379';
-    process.env.RABBITMQ_URL = 'amqp://localhost:5672';
-    process.env.AWS_ACCESS_KEY_ID = 'mock-key';
-    process.env.AWS_SECRET_ACCESS_KEY = 'mock-secret';
-    process.env.AWS_REGION = 'us-east-1';
-    process.env.AWS_S3_BUCKET_NAME = 'mock-bucket';
-    process.env.GOOGLE_MAPS_API_KEY = 'mock-maps-key';
+    env.REDIS_URL = 'redis://localhost:6379';
+    env.RABBITMQ_URL = 'amqp://localhost:5672';
+    env.AWS_ACCESS_KEY_ID = 'mock-key';
+    env.AWS_SECRET_ACCESS_KEY = 'mock-secret';
+    env.AWS_REGION = 'us-east-1';
+    env.AWS_S3_BUCKET = 'mock-bucket';
+    env.GOOGLE_MAPS_API_KEY = 'mock-maps-key';
+    env.FIREBASE_PROJECT_ID = 'mock-project-id';
+    env.FIREBASE_CLIENT_EMAIL = 'mock-email';
+    env.FIREBASE_PRIVATE_KEY = 'mock-key';
   });
 
   describe('Utils and AppErrors', () => {
@@ -209,6 +247,7 @@ describe('Backend Coverage booster Tests', () => {
 
     it('should test live instantiated RabbitMQ methods', async () => {
       const rmq = new RabbitMQService();
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await rmq.publish('notification.sms', { text: 'sms' });
       await rmq.consume('lifelink.queue.sms', jest.fn());
       await rmq.healthCheck();
@@ -302,6 +341,69 @@ describe('Backend Coverage booster Tests', () => {
       });
       const otp = await authService.resendOtp('aman.jain@donor.org');
       expect(otp).toBeDefined();
+    });
+  });
+
+  describe('Other Services booster scenarios', () => {
+    const prisma = require('@prisma/client').PrismaClient();
+
+    it('should test inventoryService search caches and sweepExpiredBatches', async () => {
+      const mockInventoryList = [{ id: 'batch-1', bloodBankId: 'bank-1', bloodGroup: 'O_NEG', status: 'AVAILABLE', unitsCount: 5 }];
+      const redis = require('../src/services/redis.service').redisService;
+      jest.spyOn(redis, 'getInventory').mockResolvedValue(JSON.stringify(mockInventoryList));
+
+      const cachedSearch = await inventoryService.searchInventory({ bloodBankId: 'bank-1', bloodGroup: 'O_NEG', status: 'AVAILABLE' });
+      expect(cachedSearch.total).toBe(1);
+
+      prisma.bloodInventory.findMany.mockResolvedValue([
+        { id: 'exp-1', bloodBankId: 'bank-1', bloodGroup: 'O_NEG', unitsCount: 2 }
+      ]);
+      prisma.bloodInventory.update.mockResolvedValue({ id: 'exp-1', status: 'EXPIRED' });
+      prisma.auditLog.create.mockResolvedValue({});
+
+      const swept = await inventoryService.sweepExpiredBatches('user-1');
+      expect(swept.length).toBe(1);
+    });
+
+    it('should test donationCampService updates, registers, and deletes', async () => {
+      prisma.donationCamp.findUnique.mockResolvedValue({ id: 'camp-1', status: 'ACTIVE' });
+      prisma.donationCamp.update.mockResolvedValue({ id: 'camp-1', name: 'Updated Camp Name' });
+      prisma.donationCamp.delete.mockResolvedValue({ id: 'camp-1' });
+      prisma.donorProfile.findUnique.mockResolvedValue({ id: 'donor-1' });
+
+      const updated = await donationCampService.updateCamp('camp-1', { name: 'Updated Camp Name' }, 'user-1');
+      expect(updated.name).toBe('Updated Camp Name');
+
+      const deleted = await donationCampService.deleteCamp('camp-1', 'user-1');
+      expect(deleted).toBeDefined();
+
+      prisma.donationCamp.findUnique.mockResolvedValue({ id: 'camp-1', status: 'COMPLETED' });
+      await expect(donationCampService.registerDonor('camp-1', 'donor-1')).rejects.toThrow();
+    });
+
+    it('should test bloodRequestService validation errors and cancellation', async () => {
+      await expect(bloodRequestService.createRequest({
+        requesterId: 'user-1',
+        bloodGroup: 'O_NEG',
+        unitsRequired: 5,
+        urgency: 'NORMAL',
+        locationName: 'Delhi',
+        latitude: -120,
+        longitude: 40
+      })).rejects.toThrow();
+
+      await expect(bloodRequestService.createRequest({
+        requesterId: 'user-1',
+        bloodGroup: 'O_NEG',
+        unitsRequired: 0,
+        urgency: 'NORMAL',
+        locationName: 'Delhi',
+        latitude: 28,
+        longitude: 77
+      })).rejects.toThrow();
+
+      prisma.bloodRequest.findUnique.mockResolvedValue({ id: 'req-1', requesterId: 'requester-1' });
+      await expect(bloodRequestService.cancelRequest('req-1', 'other-user')).rejects.toThrow();
     });
   });
 });
