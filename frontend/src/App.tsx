@@ -16,23 +16,13 @@ import DonorDashboard from './pages/donor/DonorDashboard';
 import PatientDashboard from './pages/patient/PatientDashboard';
 import HospitalDashboard from './pages/hospital/HospitalDashboard';
 import BloodBankDashboard from './pages/bloodbank/BloodBankDashboard';
-
-// --- STUB PAGE COMPONENTS (To be replaced in subsequent phases) ---
-const StubPage = ({ title }: { title: string }) => (
-  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-4">
-    <h2 className="text-2xl font-bold text-white">{title}</h2>
-    <p className="text-sm text-slate-400">
-      This interface is currently under construction for the {title.toLowerCase()} module.
-    </p>
-  </div>
-);
-
-const ProfileStub = () => <StubPage title="User Profile Settings" />;
-const InventoryStub = () => <StubPage title="Blood Unit Inventory Management" />;
-const RequestsStub = () => <StubPage title="Emergency Blood Requests Ledger" />;
-const DonationsStub = () => <StubPage title="Donations & Appointments Ledger" />;
-const EligibilityStub = () => <StubPage title="Medical Screening & Eligibility History" />;
-const CampsStub = () => <StubPage title="Blood Donation Camps Registry" />;
+import Profile from './pages/Profile';
+import Inventory from './pages/Inventory';
+import BloodRequests from './pages/BloodRequests';
+import Donations from './pages/Donations';
+import MedicalEligibility from './pages/MedicalEligibility';
+import DonationCamps from './pages/DonationCamps';
+import AdminManagement from './pages/admin/AdminManagement';
 
 function App() {
   return (
@@ -55,7 +45,7 @@ function App() {
             <Route element={<DashboardLayout />}>
               
               {/* Profile - Available to all authenticated roles */}
-              <Route path="/profile" element={<ProfileStub />} />
+              <Route path="/profile" element={<Profile />} />
 
               {/* Role Protected Dashboards */}
               <Route
@@ -104,7 +94,7 @@ function App() {
                 path="/inventory"
                 element={
                   <RoleProtectedRoute allowedRoles={['BLOOD_BANK', 'ADMIN']}>
-                    <InventoryStub />
+                    <Inventory />
                   </RoleProtectedRoute>
                 }
               />
@@ -112,7 +102,7 @@ function App() {
                 path="/requests"
                 element={
                   <RoleProtectedRoute allowedRoles={['PATIENT', 'HOSPITAL', 'ADMIN']}>
-                    <RequestsStub />
+                    <BloodRequests />
                   </RoleProtectedRoute>
                 }
               />
@@ -120,7 +110,7 @@ function App() {
                 path="/donations"
                 element={
                   <RoleProtectedRoute allowedRoles={['DONOR', 'BLOOD_BANK', 'ADMIN']}>
-                    <DonationsStub />
+                    <Donations />
                   </RoleProtectedRoute>
                 }
               />
@@ -128,7 +118,7 @@ function App() {
                 path="/eligibility"
                 element={
                   <RoleProtectedRoute allowedRoles={['DONOR']}>
-                    <EligibilityStub />
+                    <MedicalEligibility />
                   </RoleProtectedRoute>
                 }
               />
@@ -136,7 +126,15 @@ function App() {
                 path="/camps"
                 element={
                   <RoleProtectedRoute allowedRoles={['DONOR', 'ADMIN']}>
-                    <CampsStub />
+                    <DonationCamps />
+                  </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/management"
+                element={
+                  <RoleProtectedRoute allowedRoles={['ADMIN']}>
+                    <AdminManagement />
                   </RoleProtectedRoute>
                 }
               />

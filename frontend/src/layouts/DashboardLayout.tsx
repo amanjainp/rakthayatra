@@ -12,6 +12,7 @@ import {
   ClipboardDocumentCheckIcon,
   InboxIcon,
   MapIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 
 export const DashboardLayout: React.FC = () => {
@@ -42,6 +43,7 @@ export const DashboardLayout: React.FC = () => {
         { name: 'Inventory Management', path: '/inventory', icon: QueueListIcon },
         { name: 'All Requests', path: '/requests', icon: InboxIcon },
         { name: 'Camps Manager', path: '/camps', icon: MapIcon },
+        { name: 'Admin Management', path: '/admin/management', icon: ShieldExclamationIcon },
       ],
       BLOOD_BANK: [
         { name: 'Inventory Stock', path: '/inventory', icon: QueueListIcon },
