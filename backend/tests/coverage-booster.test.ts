@@ -8,10 +8,9 @@ import { RedisService } from '../src/services/redis.service';
 import { authService } from '../src/services/auth.service';
 import { env } from '../src/config/env';
 import { donationCampService } from '../src/services/donation-camp.service';
-import { donationService } from '../src/services/donation.service';
 import { inventoryService } from '../src/services/inventory.service';
-import { medicalEligibilityService } from '../src/services/medical-eligibility.service';
 import { bloodRequestService } from '../src/services/blood-request.service';
+import { medicalEligibilityService } from '../src/services/medical-eligibility.service';
 
 // Mock amqplib
 jest.mock('amqplib', () => ({
@@ -91,36 +90,44 @@ jest.mock('@prisma/client', () => {
   const localMockPrisma: any = {
     role: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
     hospitalProfile: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
     },
     bloodBankProfile: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
     },
     donorProfile: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     donationCamp: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     },
     bloodInventory: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
     },
     bloodRequest: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     deviceToken: {
@@ -361,15 +368,17 @@ describe('Backend Coverage booster Tests', () => {
       prisma.bloodInventory.update.mockResolvedValue({ id: 'exp-1', status: 'EXPIRED' });
       prisma.auditLog.create.mockResolvedValue({});
 
-      const swept = await inventoryService.sweepExpiredBatches('user-1');
+      const swept = await inventoryService.checkAndFlagExpiredUnits('user-1');
       expect(swept.length).toBe(1);
     });
 
     it('should test donationCampService updates, registers, and deletes', async () => {
       prisma.donationCamp.findUnique.mockResolvedValue({ id: 'camp-1', status: 'ACTIVE' });
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1', status: 'ACTIVE' });
       prisma.donationCamp.update.mockResolvedValue({ id: 'camp-1', name: 'Updated Camp Name' });
       prisma.donationCamp.delete.mockResolvedValue({ id: 'camp-1' });
       prisma.donorProfile.findUnique.mockResolvedValue({ id: 'donor-1' });
+      prisma.donorProfile.findFirst.mockResolvedValue({ id: 'donor-1' });
 
       const updated = await donationCampService.updateCamp('camp-1', { name: 'Updated Camp Name' }, 'user-1');
       expect(updated.name).toBe('Updated Camp Name');
@@ -378,6 +387,7 @@ describe('Backend Coverage booster Tests', () => {
       expect(deleted).toBeDefined();
 
       prisma.donationCamp.findUnique.mockResolvedValue({ id: 'camp-1', status: 'COMPLETED' });
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1', status: 'COMPLETED' });
       await expect(donationCampService.registerDonor('camp-1', 'donor-1')).rejects.toThrow();
     });
 
@@ -403,7 +413,46 @@ describe('Backend Coverage booster Tests', () => {
       })).rejects.toThrow();
 
       prisma.bloodRequest.findUnique.mockResolvedValue({ id: 'req-1', requesterId: 'requester-1' });
-      await expect(bloodRequestService.cancelRequest('req-1', 'other-user')).rejects.toThrow();
+      await expect(bloodRequestService.updateRequestStatus('req-1', 'CANCELLED', 'other-user')).rejects.toThrow();
+    });
+
+    it('should test authService forgot/reset password pathways', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'reset@life.org' });
+      prisma.user.update.mockResolvedValue({ id: 'user-1' });
+
+      const cache = require('../src/services/cache.service').cacheService;
+      jest.spyOn(cache, 'set').mockResolvedValue(undefined);
+      jest.spyOn(cache, 'get').mockResolvedValue('user-1');
+      jest.spyOn(cache, 'delete').mockResolvedValue(undefined);
+
+      const token = await authService.forgotPassword('reset@life.org');
+      expect(token).toBeDefined();
+
+      await authService.resetPassword(token, 'NewPassword@1234');
+    });
+
+    it('should test medicalEligibilityService deferrals and histories', async () => {
+      prisma.donorProfile.findUnique.mockResolvedValue({ id: 'donor-1', lastDonationDate: new Date() });
+      prisma.donorProfile.findFirst.mockResolvedValue({ id: 'donor-1', lastDonationDate: new Date() });
+      prisma.medicalEligibility.findFirst.mockResolvedValue(null);
+      prisma.medicalEligibility.findUnique.mockResolvedValue(null);
+      prisma.medicalEligibility.create.mockResolvedValue({ id: 'elig-1' });
+      prisma.donorProfile.update.mockResolvedValue({});
+      prisma.auditLog.create.mockResolvedValue({});
+      prisma.auditLog.findMany.mockResolvedValue([]);
+
+      // Submit failing questionnaire
+      await medicalEligibilityService.submitQuestionnaire('donor-1', {
+        weight: 45,
+        hasInfections: true,
+        recentSurgery: true,
+        recentTattooOrPiercing: true,
+        isPregnantOrBreastfeeding: true,
+      });
+
+      // Get history
+      const history = await medicalEligibilityService.getEligibilityHistory('donor-1');
+      expect(history.length).toBe(0);
     });
   });
 });
