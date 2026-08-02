@@ -113,6 +113,12 @@ jest.mock('@prisma/client', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    medicalEligibility: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     donationCamp: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -129,6 +135,7 @@ jest.mock('@prisma/client', () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      create: jest.fn(),
     },
     deviceToken: {
       findMany: jest.fn().mockResolvedValue([{ token: 'token-1' }]),
@@ -143,6 +150,7 @@ jest.mock('@prisma/client', () => {
     },
     auditLog: {
       create: jest.fn(),
+      findMany: jest.fn(),
     },
   };
   localMockPrisma.$transaction = jest.fn((callback: (tx: any) => any) => callback(localMockPrisma));
@@ -339,6 +347,9 @@ describe('Backend Coverage booster Tests', () => {
       jest.spyOn(cache, 'delete').mockResolvedValue(undefined);
 
       await authService.verifyOtp('aman.jain@donor.org', '123456');
+
+      jest.spyOn(cache, 'get').mockResolvedValue(null);
+      await expect(authService.verifyOtp('aman.jain@donor.org', 'invalid')).rejects.toThrow();
     });
 
     it('should resend OTP successfully', async () => {
@@ -348,6 +359,24 @@ describe('Backend Coverage booster Tests', () => {
       });
       const otp = await authService.resendOtp('aman.jain@donor.org');
       expect(otp).toBeDefined();
+    });
+
+    it('should cover authService error cases', async () => {
+      prisma.role.findUnique.mockResolvedValue(null);
+      await expect(authService.register('e@e.com', 'p', 'INVALID_ROLE', {})).rejects.toThrow();
+
+      prisma.role.findUnique.mockResolvedValue({ name: 'DONOR' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'existing' });
+      await expect(authService.register('existing@e.com', 'p', 'DONOR', {})).rejects.toThrow();
+
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(authService.login('non-existent@e.com', 'p')).rejects.toThrow();
+      await expect(authService.resendOtp('non-existent@e.com')).rejects.toThrow();
+      await expect(authService.forgotPassword('non-existent@e.com')).rejects.toThrow();
+
+      const cache = require('../src/services/cache.service').cacheService;
+      jest.spyOn(cache, 'get').mockResolvedValue(null);
+      await expect(authService.resetPassword('invalid-token', 'p')).rejects.toThrow();
     });
   });
 
@@ -392,6 +421,21 @@ describe('Backend Coverage booster Tests', () => {
     });
 
     it('should test bloodRequestService validation errors and cancellation', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      prisma.user.findFirst.mockResolvedValue({ id: 'user-1' });
+      prisma.bloodRequest.create.mockResolvedValue({ id: 'req-1', urgency: 'NORMAL' });
+      prisma.auditLog.create.mockResolvedValue({});
+      const req = await bloodRequestService.createRequest({
+        requesterId: 'user-1',
+        bloodGroup: 'O_NEG',
+        unitsRequired: 5,
+        urgency: 'NORMAL',
+        locationName: 'Delhi',
+        latitude: 28.5,
+        longitude: 77.2
+      }, 'user-1');
+      expect(req).toBeDefined();
+
       await expect(bloodRequestService.createRequest({
         requesterId: 'user-1',
         bloodGroup: 'O_NEG',

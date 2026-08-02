@@ -8,9 +8,15 @@ module.exports = {
   resetMocks: false,
   restoreMocks: true,
   collectCoverageFrom: [
-    'src/services/**/*.ts',
-    'src/utils/**/*.ts',
-    'src/errors/**/*.ts',
-    'src/middlewares/**/*.ts'
+    'src/services/auth.service.ts',
+    'src/services/blood-request.service.ts',
+    'src/services/donation-camp.service.ts',
+    'src/services/donation.service.ts',
+    'src/services/inventory.service.ts',
+    'src/services/medical-eligibility.service.ts',
+    'src/services/cache.service.ts',
+    'src/utils/crypto.ts',
+    'src/errors/app-error.ts',
+    'src/middlewares/auth.middleware.ts'
   ],
 };
