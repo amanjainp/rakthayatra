@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1785676903800" clover="3.2.0">
-  <project timestamp="1785676903801" name="All files">
+<coverage generated="1785678047834" clover="3.2.0">
+  <project timestamp="1785678047835" name="All files">
     <metrics statements="620" coveredstatements="233" conditionals="239" coveredconditionals="19" methods="232" coveredmethods="22" elements="1091" coveredelements="274" complexity="0" loc="620" ncloc="620" packages="9" files="28" classes="28"/>
     <package name="src">
       <metrics statements="31" coveredstatements="31" conditionals="0" coveredconditionals="0" methods="45" coveredmethods="1"/>
@@ -717,14 +717,14 @@
       <metrics statements="14" coveredstatements="14" conditionals="9" coveredconditionals="9" methods="3" coveredmethods="3"/>
       <file name="validation.ts" path="C:\Users\amanj\OneDrive\Documents\project\rakthayatra\frontend\src\utils\validation.ts">
         <metrics statements="14" coveredstatements="14" conditionals="9" coveredconditionals="9" methods="3" coveredmethods="3"/>
-        <line num="1" count="1" type="stmt"/>
-        <line num="3" count="1" type="stmt"/>
-        <line num="11" count="1" type="stmt"/>
-        <line num="16" count="1" type="stmt"/>
-        <line num="20" count="1" type="stmt"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="11" count="2" type="stmt"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="20" count="2" type="stmt"/>
         <line num="25" count="3" type="stmt"/>
-        <line num="30" count="1" type="stmt"/>
-        <line num="35" count="1" type="stmt"/>
+        <line num="30" count="2" type="stmt"/>
+        <line num="35" count="2" type="stmt"/>
         <line num="59" count="4" type="cond" truecount="1" falsecount="0"/>
         <line num="60" count="2" type="cond" truecount="3" falsecount="0"/>
         <line num="62" count="2" type="stmt"/>

@@ -7,4 +7,10 @@ module.exports = {
   clearMocks: true,
   resetMocks: false,
   restoreMocks: true,
+  collectCoverageFrom: [
+    'src/services/**/*.ts',
+    'src/utils/**/*.ts',
+    'src/errors/**/*.ts',
+    'src/middlewares/**/*.ts'
+  ],
 };
