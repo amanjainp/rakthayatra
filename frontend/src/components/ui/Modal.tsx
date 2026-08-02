@@ -57,10 +57,11 @@ export const Modal: React.FC<ModalProps> = ({
         className={`relative w-full ${sizes[size]} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200`}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800/40">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h3>
+          <h3 id="modal-title" className="text-lg font-bold text-slate-900 dark:text-white">{title}</h3>
           <button
             onClick={onClose}
             className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
