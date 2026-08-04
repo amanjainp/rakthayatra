@@ -112,6 +112,7 @@ jest.mock('@prisma/client', () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
     medicalEligibility: {
       findUnique: jest.fn(),
@@ -124,6 +125,8 @@ jest.mock('@prisma/client', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
+      findMany: jest.fn(),
     },
     bloodInventory: {
       findUnique: jest.fn(),
@@ -142,6 +145,8 @@ jest.mock('@prisma/client', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
+      count: jest.fn(),
+      aggregate: jest.fn(),
     },
     deviceToken: {
       findMany: jest.fn().mockResolvedValue([{ token: 'token-1' }]),
@@ -624,6 +629,34 @@ describe('Backend Coverage booster Tests', () => {
       prisma.bloodInventory.findUnique.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE' });
       prisma.bloodInventory.findFirst.mockResolvedValue({ id: 'batch-1', status: 'AVAILABLE' });
       await expect(inventoryService.releaseUnits('batch-1')).rejects.toThrow();
+
+      // Extra edge cases
+      await expect(donationService.registerAppointment({
+        donorProfileId: 'donor-1',
+        donationDate: new Date(),
+        unitsDonated: 0
+      })).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.registerVolunteer('camp-not-exists', { name: 'V', email: 'v@v.com', phone: '123' })).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1' });
+      const { RedisService } = require('../src/services/redis.service');
+      jest.spyOn(RedisService.prototype, 'get').mockResolvedValue(JSON.stringify([{ email: 'v@v.com' }]));
+      await expect(donationCampService.registerVolunteer('camp-1', { name: 'V', email: 'v@v.com', phone: '123' })).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue({ id: 'camp-1' });
+      prisma.hospitalProfile.findFirst.mockResolvedValue({ id: 'hosp-1' });
+      jest.spyOn(RedisService.prototype, 'get').mockResolvedValue(JSON.stringify([{ hospitalProfileId: 'hosp-1' }]));
+      await expect(donationCampService.associateHospital('camp-1', 'hosp-1')).rejects.toThrow();
+
+      prisma.donationCamp.findFirst.mockResolvedValue(null);
+      await expect(donationCampService.getCampStatistics('camp-not-exists')).rejects.toThrow();
+
+      prisma.donationCamp.findMany.mockResolvedValue([]);
+      prisma.donationCamp.count.mockResolvedValue(0);
+      const campsResult = await donationCampService.getCamps({ city: 'Delhi', page: 2, limit: 5 });
+      expect(campsResult.total).toBe(0);
     });
   });
 });
