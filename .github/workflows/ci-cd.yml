@@ -1,0 +1,148 @@
+name: LifeLink CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - dev
+  pull_request:
+    branches:
+      - main
+      - staging
+      - dev
+
+jobs:
+  # ----------------------------------------------------
+  # JOB 1: Test & Integrity Checks
+  # ----------------------------------------------------
+  test:
+    name: Integrity Checks & Coverage Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install Workspace Dependencies
+        run: |
+          npm ci --workspace=backend
+          npm ci --workspace=frontend
+
+      - name: Lint Verification Checks
+        run: |
+          npm run lint --workspace=backend
+          npm run lint --workspace=frontend
+
+      - name: Run Backend Tests & Coverage Checks
+        run: npm run test --workspace=backend -- --coverage
+
+      - name: Run Frontend Tests & Coverage Checks
+        run: npm run test --workspace=frontend -- --coverage
+
+  # ----------------------------------------------------
+  # JOB 2: Production Build & Registry Push
+  # ----------------------------------------------------
+  build-and-push:
+    name: Build & Push Docker Images
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Tag Matcher
+        id: vars
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "env_name=production" >> $GITHUB_OUTPUT
+            echo "docker_tag=prod-latest" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+            echo "docker_tag=stage-latest" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=development" >> $GITHUB_OUTPUT
+            echo "docker_tag=dev-latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Note: Real ECR/DockerHub authentications would run here using github secrets
+      # Example: 
+      # - name: Log in to DockerHub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Cache Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false # Set to true once auth credentials secrets are mapped in GitHub
+          tags: lifelink-backend:${{ steps.vars.outputs.docker_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Cache Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: lifelink-frontend:${{ steps.vars.outputs.docker_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ----------------------------------------------------
+  # JOB 3: Kubernetes Deployments (Helm Charts Rollouts)
+  # ----------------------------------------------------
+  deploy:
+    name: Deploy to Kubernetes Cluster
+    needs: build-and-push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Target
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "KUBE_ENV=production" >> $GITHUB_ENV
+          else
+            echo "KUBE_ENV=staging" >> $GITHUB_ENV
+          fi
+
+      # - name: Configure AWS ECR Access Tokens
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: us-east-1
+
+      # - name: Update kubeconfig session targets
+      #   run: aws eks update-kubeconfig --name lifelink-${{ env.KUBE_ENV }}-cluster
+
+      # - name: Deploy Helm Chart Packages
+      #   run: |
+      #     helm upgrade --install lifelink ./infrastructure/helm/lifelink \
+      #       --namespace lifelink-${{ env.KUBE_ENV }} \
+      #       --values ./infrastructure/helm/lifelink/values-${{ env.KUBE_ENV }}.yaml \
+      #       --set backend.image.tag=${{ github.sha }} \
+      #       --set frontend.image.tag=${{ github.sha }} \
+      #       --atomic --timeout 10m

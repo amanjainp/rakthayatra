@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: lifelink-db-prod
+    environment:
+      POSTGRES_DB: rakthayatra_prod
+      POSTGRES_USER: lifelink_admin
+      POSTGRES_PASSWORD: ${DB_PROD_PASSWORD:-ProdSecurePassword123}
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    networks:
+      - lifelink-network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifelink_admin -d rakthayatra_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Cache & Session Caching Service
+  redis:
+    image: redis:7-alpine
+    container_name: lifelink-redis-prod
+    command: redis-server --requirepass ${REDIS_PROD_PASSWORD:-ProdRedisSecurePass123}
+    volumes:
+      - redisdata-prod:/data
+    networks:
+      - lifelink-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PROD_PASSWORD:-ProdRedisSecurePass123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Message Broker service
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: lifelink-rabbitmq-prod
+    environment:
+      RABBITMQ_DEFAULT_USER: lifelink_mq_user
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PROD_PASSWORD:-ProdMQSecurePass123}
+    volumes:
+      - mqdata-prod:/var/lib/rabbitmq
+    networks:
+      - lifelink-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Backend REST API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lifelink-api-prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://lifelink_admin:${DB_PROD_PASSWORD:-ProdSecurePassword123}@postgres:5432/rakthayatra_prod?schema=public
+      REDIS_URL: redis://:${REDIS_PROD_PASSWORD:-ProdRedisSecurePass123}@redis:6379
+      RABBITMQ_URL: amqp://lifelink_mq_user:${RABBITMQ_PROD_PASSWORD:-ProdMQSecurePass123}@rabbitmq:5672
+      JWT_SECRET: ${JWT_PROD_SECRET:-ProdSuperSecretJWTTokenKey2026}
+      PORT: 5000
+      NODE_ENV: production
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+    networks:
+      - lifelink-network
+    restart: always
+    expose:
+      - "5000"
+
+  # Frontend Web Client
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lifelink-web-prod
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - lifelink-network
+    restart: always
+
+networks:
+  lifelink-network:
+    driver: bridge
+
+volumes:
+  pgdata-prod:
+    driver: local
+  redisdata-prod:
+    driver: local
+  mqdata-prod:
+    driver: local

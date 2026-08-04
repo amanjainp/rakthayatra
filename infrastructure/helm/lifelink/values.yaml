@@ -1,0 +1,88 @@
+# Default values configurations for lifelink.
+
+# ----------------------------------------------------
+# GLOBAL DEFINITIONS
+# ----------------------------------------------------
+global:
+  environment: production
+  domainName: lifelink.org
+
+# ----------------------------------------------------
+# BACKEND API DEPLOYMENT
+# ----------------------------------------------------
+backend:
+  replicaCount: 2
+  image:
+    repository: lifelink-backend
+    pullPolicy: IfNotPresent
+    tag: "prod-latest"
+  service:
+    type: ClusterIP
+    port: 5000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  secrets:
+    jwtSecret: "ProdSuperSecretJWTTokenKey2026"
+    dbUrl: "postgresql://lifelink_admin:ProdSecurePassword123@postgres:5432/rakthayatra_prod"
+    redisUrl: "redis://:ProdRedisSecurePass123@redis:6379"
+    rabbitmqUrl: "amqp://lifelink_mq_user:ProdMQSecurePass123@rabbitmq:5672"
+
+# ----------------------------------------------------
+# FRONTEND CLIENT DEPLOYMENT
+# ----------------------------------------------------
+frontend:
+  replicaCount: 2
+  image:
+    repository: lifelink-frontend
+    pullPolicy: IfNotPresent
+    tag: "prod-latest"
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# ----------------------------------------------------
+# INGRESS & TLS
+# ----------------------------------------------------
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-production"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: lifelink.org
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: backend
+        - path: /
+          pathType: Prefix
+          backend: frontend
+  tls:
+    - secretName: lifelink-tls-certs
+      hosts:
+        - lifelink.org

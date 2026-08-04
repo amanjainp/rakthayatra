@@ -1,0 +1,6 @@
+apiVersion: v2
+name: lifelink
+description: Helm Chart to deploy LifeLink (Rakthayatra) platform.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
