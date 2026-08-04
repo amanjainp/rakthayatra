@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: lifelink-pod-monitor
+  namespace: lifelink-production
+  labels:
+    release: prometheus-operator
+spec:
+  selector:
+    matchLabels:
+      app: lifelink-backend
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lifelink-db-backup
+  namespace: lifelink-production
+spec:
+  schedule: "0 0 * * *" # Daily at midnight
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: postgres-backup-tool
+              image: amazon/aws-cli:latest
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              env:
+                - name: DB_HOST
+                  value: "postgres-service"
+                - name: DB_NAME
+                  value: "lifelink"
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: password
+              volumeMounts:
+                - name: backup-script-volume
+                  mountPath: /scripts
+          restartPolicy: OnFailure
+          volumes:
+            - name: backup-script-volume
+              configMap:
+                name: backup-scripts
+                defaultMode: 0755

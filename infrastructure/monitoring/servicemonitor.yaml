@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lifelink-backend-monitor
+  namespace: lifelink-production
+  labels:
+    release: prometheus-operator # Integrates with kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: lifelink-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

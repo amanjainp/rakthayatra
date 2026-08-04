@@ -5,6 +5,7 @@ import { BloodBankRepository } from '../repositories/blood-bank.repository';
 import { redisService } from './redis.service';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
 import logger from '../config/logger';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 
@@ -144,6 +145,7 @@ export class InventoryService {
         },
       });
 
+      metricsService.recordInventoryReservation();
       return reservedRecord;
     });
 

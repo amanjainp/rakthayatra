@@ -10,8 +10,17 @@ import donationRoutes from './routes/donation.routes';
 import bloodRequestRoutes from './routes/blood-request.routes';
 import medicalEligibilityRoutes from './routes/medical-eligibility.routes';
 import donationCampRoutes from './routes/donation-camp.routes';
+import { metricsMiddleware } from './middlewares/metrics.middleware';
+import metricsRoutes from './routes/metrics.routes';
+import { loggingMiddleware } from './middlewares/logging.middleware';
 
 const app = express();
+
+// Apply Logging context middleware first to set request/correlation IDs
+app.use(loggingMiddleware);
+
+// Apply Metrics Middleware to trace HTTP timings
+app.use(metricsMiddleware);
 
 // Security Middlewares
 app.use(helmet());
@@ -51,6 +60,9 @@ app.use('/api/camps', donationCampRoutes);
 
 // Health Check API
 app.use('/health', healthRoutes);
+
+// Metrics Endpoint Route
+app.use('/metrics', metricsRoutes);
 
 // 404 Route Catch-all
 app.use((req: Request, res: Response) => {

@@ -1,0 +1,102 @@
+groups:
+  - name: lifelink-critical-alerts
+    rules:
+      # 1. API Server Offline
+      - alert: ApiUnavailable
+        expr: up{job="lifelink-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API Server Backend is unavailable"
+          description: "Prometheus cannot scrape the API server target. Outage detected."
+
+      # 2. Database (PostgreSQL) Offline
+      - alert: DatabaseUnavailable
+        expr: pg_up == 0 or lifelink_prisma_query_failures_total > 50
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL Database is unavailable"
+          description: "Database connection failed or query failure rates exceed threshold limits."
+
+      # 3. Redis Cache Offline
+      - alert: RedisUnavailable
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache server is offline"
+          description: "The Redis instance is unresponsive to status check ping requests."
+
+      # 4. RabbitMQ Broker Offline
+      - alert: RabbitMQUnavailable
+        expr: rabbitmq_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RabbitMQ message broker is offline"
+          description: "RabbitMQ container is unresponsive or node cluster is down."
+
+      # 5. High Server Error Rate
+      - alert: HighHttpErrorRate
+        expr: sum(rate(lifelink_http_requests_total{status=~"5.."}[5m])) / sum(rate(lifelink_http_requests_total[5m])) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP 5xx error rates detected"
+          description: "HTTP 5xx errors represent {{ $value | printf \"%.2f\" }}% of API traffic."
+
+      # 6. Slow API Response Latency
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, sum(rate(lifelink_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API latency thresholds exceeded"
+          description: "The p95 response time is currently slow ({{ $value | printf \"%.2f\" }}s)."
+
+      # 7. High Host CPU Utilization
+      - alert: HighCpuUsage
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Host CPU usage detected"
+          description: "CPU load exceeds 90% (currently {{ $value | printf \"%.2f\" }}%)."
+
+      # 8. High Host Memory Footprint
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Host Memory usage detected"
+          description: "Memory utilization exceeds 90% (currently {{ $value | printf \"%.2f\" }}%)."
+
+      # 9. RabbitMQ Queue Backlog
+      - alert: RabbitMQQueueBacklog
+        expr: sum(lifelink_rabbitmq_queue_depth) by (queue) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ message backlog detected"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages queued in backlog."
+
+      # 10. Database Backup Failures
+      - alert: FailedDatabaseBackup
+        expr: increase(lifelink_backup_failures_total[1d]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database backup execution failed"
+          description: "Daily automated backup failed to run or export to storage targets."

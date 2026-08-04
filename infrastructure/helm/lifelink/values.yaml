@@ -86,3 +86,14 @@ ingress:
     - secretName: lifelink-tls-certs
       hosts:
         - lifelink.org
+
+# ----------------------------------------------------
+# OBSERVABILITY & MONITORING
+# ----------------------------------------------------
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus-operator

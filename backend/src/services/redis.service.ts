@@ -2,6 +2,7 @@ import Redis from 'ioredis';
 import { env } from '../config/env';
 import logger from '../config/logger';
 import { InternalServerError } from '../errors/app-error';
+import { metricsService } from './metrics.service';
 
 export class RedisService {
   private client: Redis | null = null;
@@ -62,28 +63,45 @@ export class RedisService {
    * Retrieves value linked to key.
    */
   async get(key: string): Promise<string | null> {
+    let value: string | null = null;
+
     if (this.isMockMode) {
       const record = this.mockStore.get(key);
-      if (!record) return null;
-      if (record.expiresAt && Date.now() > record.expiresAt) {
-        this.mockStore.delete(key);
+      if (!record) {
+        metricsService.recordCacheMiss();
         return null;
       }
-      return record.value;
+      if (record.expiresAt && Date.now() > record.expiresAt) {
+        this.mockStore.delete(key);
+        metricsService.recordTTLExpiration();
+        metricsService.recordCacheMiss();
+        return null;
+      }
+      value = record.value;
+    } else {
+      try {
+        value = await this.client!.get(key);
+      } catch (error: any) {
+        metricsService.recordCacheOp();
+        logger.error(`Redis GET error for key "${key}": ${error.message}`);
+        throw new InternalServerError('Failed to fetch item from cache.');
+      }
     }
 
-    try {
-      return await this.client!.get(key);
-    } catch (error: any) {
-      logger.error(`Redis GET error for key "${key}": ${error.message}`);
-      throw new InternalServerError('Failed to fetch item from cache.');
+    if (value !== null) {
+      metricsService.recordCacheHit();
+    } else {
+      metricsService.recordCacheMiss();
     }
+    return value;
   }
 
   /**
    * Saves key-value pair with an optional TTL (in seconds).
    */
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
+    metricsService.recordCacheOp();
+
     if (this.isMockMode) {
       const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : null;
       this.mockStore.set(key, { value, expiresAt });
@@ -106,6 +124,8 @@ export class RedisService {
    * Deletes a key from the cache.
    */
   async del(key: string): Promise<void> {
+    metricsService.recordCacheOp();
+
     if (this.isMockMode) {
       this.mockStore.delete(key);
       return;
@@ -123,6 +143,8 @@ export class RedisService {
    * Clears all cache records.
    */
   async flushAll(): Promise<void> {
+    metricsService.recordCacheOp();
+
     if (this.isMockMode) {
       this.mockStore.clear();
       return;

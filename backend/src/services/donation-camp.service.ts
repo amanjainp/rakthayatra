@@ -5,6 +5,7 @@ import { HospitalRepository } from '../repositories/hospital.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { RedisService } from './redis.service';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 const redisService = new RedisService();
@@ -188,6 +189,8 @@ export class DonationCampService {
         volunteerName: volunteer.name,
       },
     });
+
+    metricsService.recordCampRegistration('volunteer');
   }
 
   /**
@@ -224,6 +227,8 @@ export class DonationCampService {
         details: { campId, donorProfileId },
       });
     });
+
+    metricsService.recordCampRegistration('donor');
   }
 
   /**
@@ -264,6 +269,8 @@ export class DonationCampService {
       action: 'ASSOCIATE_CAMP_HOSPITAL',
       details: { campId, hospitalProfileId },
     });
+
+    metricsService.recordCampRegistration('hospital');
   }
 
   /**

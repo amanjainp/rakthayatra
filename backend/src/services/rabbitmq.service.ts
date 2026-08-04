@@ -2,6 +2,7 @@ import { ChannelModel, Channel, connect } from 'amqplib';
 import { env } from '../config/env';
 import logger from '../config/logger';
 import { InternalServerError } from '../errors/app-error';
+import { metricsService } from './metrics.service';
 
 export interface QueueBinding {
   queueName: string;
@@ -95,9 +96,25 @@ export class RabbitMQService {
   }
 
   /**
+   * Returns message count in the queue if online.
+   */
+  async getQueueDepth(queueName: string): Promise<number> {
+    if (this.isMockMode || !this.channel) {
+      return 0;
+    }
+    try {
+      const qInfo = await this.channel.checkQueue(queueName);
+      return qInfo.messageCount;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
    * Publishes a message payload to the Topic Exchange.
    */
   async publish(routingKey: string, message: any): Promise<void> {
+    metricsService.recordRabbitMQPublish();
     const payloadBuffer = Buffer.from(JSON.stringify(message));
 
     if (this.isMockMode) {
@@ -111,6 +128,7 @@ export class RabbitMQService {
             // Trigger callback in the background
             setImmediate(async () => {
               try {
+                metricsService.recordRabbitMQConsume();
                 await callback(message);
               } catch (error: any) {
                 logger.error(`[MOCK DLQ] Message failed processing on queue "${binding.queueName}". Sent to DLQ "dlq.${binding.queueName}": ${error.message}`);
@@ -163,6 +181,7 @@ export class RabbitMQService {
         if (!amqpMsg) return;
 
         try {
+          metricsService.recordRabbitMQConsume();
           const content = JSON.parse(amqpMsg.content.toString());
           await callback(content);
           this.channel!.ack(amqpMsg); // Acknowledge success

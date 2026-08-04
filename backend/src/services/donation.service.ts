@@ -5,6 +5,7 @@ import { MedicalEligibilityRepository } from '../repositories/medical-eligibilit
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { inventoryService } from './inventory.service';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 
@@ -118,6 +119,8 @@ export class DonationService {
         status: 'COMPLETED',
         notes: data.notes,
       });
+
+      metricsService.recordDonationCompleted();
 
       // 4. Update lastDonationDate on DonorProfile
       const donationDate = new Date();

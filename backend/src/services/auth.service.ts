@@ -2,6 +2,7 @@ import { PrismaClient, UserStatus, BloodGroup, User, Role } from '@prisma/client
 import bcrypt from 'bcryptjs';
 import { generateAccessToken, generateSecureToken, generateOTP } from '../utils/crypto';
 import { cacheService } from './cache.service';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 
@@ -122,48 +123,54 @@ export class AuthService {
     passwordRaw: string,
     ipAddress?: string,
   ): Promise<{ accessToken: string; refreshToken: string; user: User & { role: Role } }> {
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { role: true },
-    });
-
-    if (!user || user.deletedAt) {
-      throw new Error('Invalid email or password.');
-    }
-
-    if (user.status === UserStatus.SUSPENDED) {
-      throw new Error('Your account has been suspended. Please contact support.');
-    }
-
-    const isMatch = await bcrypt.compare(passwordRaw, user.passwordHash);
-    if (!isMatch) {
-      throw new Error('Invalid email or password.');
-    }
-
-    const accessToken = generateAccessToken({ userId: user.id, role: user.role.name });
-    const refreshTokenString = generateSecureToken();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-    await prisma.$transaction(async (tx) => {
-      await tx.refreshToken.create({
-        data: {
-          token: refreshTokenString,
-          userId: user.id,
-          expiresAt,
-        },
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: { role: true },
       });
 
-      await tx.auditLog.create({
-        data: {
-          userId: user.id,
-          action: 'USER_LOGIN',
-          details: { email: user.email },
-          ipAddress: ipAddress || null,
-        },
-      });
-    });
+      if (!user || user.deletedAt) {
+        throw new Error('Invalid email or password.');
+      }
 
-    return { accessToken, refreshToken: refreshTokenString, user };
+      if (user.status === UserStatus.SUSPENDED) {
+        throw new Error('Your account has been suspended. Please contact support.');
+      }
+
+      const isMatch = await bcrypt.compare(passwordRaw, user.passwordHash);
+      if (!isMatch) {
+        throw new Error('Invalid email or password.');
+      }
+
+      const accessToken = generateAccessToken({ userId: user.id, role: user.role.name });
+      const refreshTokenString = generateSecureToken();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      await prisma.$transaction(async (tx) => {
+        await tx.refreshToken.create({
+          data: {
+            token: refreshTokenString,
+            userId: user.id,
+            expiresAt,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: user.id,
+            action: 'USER_LOGIN',
+            details: { email: user.email },
+            ipAddress: ipAddress || null,
+          },
+        });
+      });
+
+      metricsService.recordLoginSuccess();
+      return { accessToken, refreshToken: refreshTokenString, user };
+    } catch (error) {
+      metricsService.recordLoginFailure();
+      throw error;
+    }
   }
 
   async logout(tokenString: string, ipAddress?: string): Promise<void> {
@@ -193,81 +200,93 @@ export class AuthService {
     tokenString: string,
     ipAddress?: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const record = await prisma.refreshToken.findUnique({
-      where: { token: tokenString },
-      include: { user: { include: { role: true } } },
-    });
+    try {
+      const record = await prisma.refreshToken.findUnique({
+        where: { token: tokenString },
+        include: { user: { include: { role: true } } },
+      });
 
-    if (!record || record.expiresAt < new Date()) {
-      if (record) {
-        await prisma.refreshToken.delete({ where: { id: record.id } });
+      if (!record || record.expiresAt < new Date()) {
+        if (record) {
+          await prisma.refreshToken.delete({ where: { id: record.id } });
+        }
+        throw new Error('Refresh token is invalid or has expired.');
       }
-      throw new Error('Refresh token is invalid or has expired.');
+
+      // Refresh Token Rotation (RTR): delete old one and assign a new one
+      const newAccessToken = generateAccessToken({ userId: record.userId, role: record.user.role.name });
+      const newRefreshTokenString = generateSecureToken();
+      const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.refreshToken.delete({
+          where: { id: record.id },
+        });
+
+        await tx.refreshToken.create({
+          data: {
+            token: newRefreshTokenString,
+            userId: record.userId,
+            expiresAt: newExpiresAt,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: record.userId,
+            action: 'TOKEN_REFRESH',
+            details: { message: 'Token rotated' },
+            ipAddress: ipAddress || null,
+          },
+        });
+      });
+
+      metricsService.recordJWTRefresh(true);
+      return { accessToken: newAccessToken, refreshToken: newRefreshTokenString };
+    } catch (error) {
+      metricsService.recordJWTRefresh(false);
+      throw error;
     }
-
-    // Refresh Token Rotation (RTR): delete old one and assign a new one
-    const newAccessToken = generateAccessToken({ userId: record.userId, role: record.user.role.name });
-    const newRefreshTokenString = generateSecureToken();
-    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.refreshToken.delete({
-        where: { id: record.id },
-      });
-
-      await tx.refreshToken.create({
-        data: {
-          token: newRefreshTokenString,
-          userId: record.userId,
-          expiresAt: newExpiresAt,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId: record.userId,
-          action: 'TOKEN_REFRESH',
-          details: { message: 'Token rotated' },
-          ipAddress: ipAddress || null,
-        },
-      });
-    });
-
-    return { accessToken: newAccessToken, refreshToken: newRefreshTokenString };
   }
 
   async verifyOtp(email: string, otp: string, ipAddress?: string): Promise<void> {
-    const cachedOtp = await cacheService.get(`otp:${email}`);
-    if (!cachedOtp || cachedOtp !== otp) {
-      throw new Error('Invalid or expired OTP.');
-    }
-
-    await cacheService.delete(`otp:${email}`);
-
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (user) {
-      // Set status to active if pending email verification (e.g. for donors or patients)
-      if (user.status === UserStatus.PENDING_VERIFICATION) {
-        // If hospital or blood bank, verification still requires admin document review,
-        // but we flag their email validation in logs
-        // For simplicity:
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { status: UserStatus.ACTIVE },
-        });
+    try {
+      const cachedOtp = await cacheService.get(`otp:${email}`);
+      if (!cachedOtp || cachedOtp !== otp) {
+        throw new Error('Invalid or expired OTP.');
       }
 
-      await prisma.auditLog.create({
-        data: {
-          userId: user.id,
-          action: 'EMAIL_VERIFIED',
-          details: { email },
-          ipAddress: ipAddress || null,
-        },
+      await cacheService.delete(`otp:${email}`);
+
+      const user = await prisma.user.findUnique({
+        where: { email },
       });
+
+      if (user) {
+        // Set status to active if pending email verification (e.g. for donors or patients)
+        if (user.status === UserStatus.PENDING_VERIFICATION) {
+          // If hospital or blood bank, verification still requires admin document review,
+          // but we flag their email validation in logs
+          // For simplicity:
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { status: UserStatus.ACTIVE },
+          });
+
+          await prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              action: 'EMAIL_VERIFIED',
+              details: { email },
+              ipAddress: ipAddress || null,
+            },
+          });
+        }
+      }
+      metricsService.recordOTPVerification(true);
+    } catch (error) {
+      metricsService.recordOTPVerification(false);
+      throw error;
     }
   }
 

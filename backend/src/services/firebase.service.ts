@@ -4,6 +4,7 @@ import { PrismaClient, NotificationType } from '@prisma/client';
 import { env } from '../config/env';
 import logger from '../config/logger';
 import { BadRequestError, InternalServerError } from '../errors/app-error';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 
@@ -122,6 +123,8 @@ export class FirebaseService {
       },
     });
 
+    metricsService.recordNotificationSent(type);
+
     if (tokens.length === 0) {
       logger.debug(`No device tokens found for user: ${userId}. Saved to notification history.`);
       return;
@@ -157,6 +160,8 @@ export class FirebaseService {
     _type: NotificationType,
     data?: Record<string, string>,
   ): Promise<void> {
+    metricsService.recordNotificationSent(_type);
+
     if (this.isMockMode) {
       logger.info(`[MOCK] Topic Broadcast sent to topic "${topic}": Title="${title}"`);
       return;

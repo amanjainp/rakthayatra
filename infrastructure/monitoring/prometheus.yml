@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "alertmanager:9093"
+
+scrape_configs:
+  # 1. Express API Backend Scraper
+  - job_name: 'lifelink-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:5000']
+
+  # 2. Infrastructure System Node Exporter Scraper
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # 3. PostgreSQL Database Exporter Scraper
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # 4. Redis Memory Exporter Scraper
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # 5. RabbitMQ Queue Exporter Scraper
+  - job_name: 'rabbitmq-exporter'
+    static_configs:
+      - targets: ['rabbitmq:15692']

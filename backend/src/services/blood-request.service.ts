@@ -8,6 +8,7 @@ import { BLOOD_COMPATIBILITY } from '../constants/app.constants';
 import { mapsService } from './maps.service';
 import { firebaseService } from './firebase.service';
 import logger from '../config/logger';
+import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
 
@@ -34,6 +35,12 @@ export class BloodRequestService {
 
     if (data.latitude < -90 || data.latitude > 90 || data.longitude < -180 || data.longitude > 180) {
       throw new BadRequestError('Invalid geocoding coordinates.');
+    }
+
+    // Record metrics
+    metricsService.recordBloodRequest(data.urgency);
+    if (data.urgency === 'EMERGENCY') {
+      metricsService.recordEmergencyRequest();
     }
 
     // Set expiry: 24h for EMERGENCY, 7 days for NORMAL
