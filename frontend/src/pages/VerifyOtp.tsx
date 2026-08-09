@@ -22,6 +22,10 @@ export const VerifyOtp: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
+  React.useEffect(() => {
+    navigate('/login', { replace: true });
+  }, [navigate]);
+
   const {
     register,
     handleSubmit,

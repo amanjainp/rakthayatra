@@ -64,8 +64,8 @@ export const Register: React.FC = () => {
         details,
       });
 
-      toast.success('Registration successful! OTP sent to your email.');
-      navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
+      toast.success('Registration successful! Please log in.');
+      navigate('/login');
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || 'Registration failed. Please try again.';
       toast.error(errMsg);

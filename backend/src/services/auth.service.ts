@@ -41,7 +41,7 @@ export class AuthService {
           email,
           passwordHash,
           roleId: role.id,
-          status: role.name === 'DONOR' || role.name === 'PATIENT' ? UserStatus.ACTIVE : UserStatus.PENDING_VERIFICATION,
+          status: UserStatus.ACTIVE,
         },
       });
 
