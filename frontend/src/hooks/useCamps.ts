@@ -24,7 +24,7 @@ export const useCamps = () => {
     queryFn: async () => {
       try {
         const res = await apiClient.get('/camps').catch(() => null);
-        return (res?.data?.data || [
+        return (res?.data?.data?.items || res?.data?.data || [
           {
             id: 'camp-1',
             name: 'Noida City Center Megadrive',

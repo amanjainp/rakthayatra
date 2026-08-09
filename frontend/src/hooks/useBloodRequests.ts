@@ -26,7 +26,7 @@ export const useBloodRequests = (filters?: { status?: string }) => {
     queryFn: async () => {
       try {
         const res = await apiClient.get('/requests').catch(() => null);
-        let items = (res?.data?.data || [
+        let items = (res?.data?.data?.items || res?.data?.data || [
           {
             id: 'req-1',
             requesterId: 'user-1',

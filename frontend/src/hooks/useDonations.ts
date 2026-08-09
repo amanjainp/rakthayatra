@@ -25,7 +25,7 @@ export const useDonations = (donorId?: string) => {
       try {
         const path = donorId ? `/donations/donor/${donorId}` : '/donations';
         const res = await apiClient.get(path).catch(() => null);
-        return (res?.data?.data || [
+        return (res?.data?.data?.items || res?.data?.data || [
           {
             id: 'don-1',
             donorId: donorId || 'donor-1',

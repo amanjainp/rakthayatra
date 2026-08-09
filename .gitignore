@@ -4,6 +4,7 @@ node_modules/
 # Local Environments (portable node/postgres)
 .node/
 .postgres/
+pg_server/
 
 # Build outputs
 dist/
