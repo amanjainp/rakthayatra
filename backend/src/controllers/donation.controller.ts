@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 import { donationService } from '../services/donation.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
@@ -227,7 +227,7 @@ export class DonationController {
   /**
    * Retrieves all verified blood banks in the system.
    */
-  async getBloodBanks(req: Request, res: Response) {
+  async getBloodBanks(_req: Request, res: Response) {
     try {
       const bloodBanks = await prisma.bloodBankProfile.findMany({
         where: { deletedAt: null },
