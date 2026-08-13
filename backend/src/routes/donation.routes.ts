@@ -19,6 +19,9 @@ router.post('/:id/cancel', authenticate, requireRoles(['DONOR', 'BLOOD_BANK', 'A
   donationController.cancel(req, res)
 );
 
+// Get verified blood banks list
+router.get('/blood-banks', authenticate, (req, res) => donationController.getBloodBanks(req, res));
+
 // 4. Retrieve donor donation history (Authenticated users)
 router.get('/donor/:id', authenticate, (req, res) => donationController.getHistory(req, res));
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDonations } from '../hooks/useDonations';
 import { useAuth } from '../hooks/useAuth';
 import { Plus, Heart, Award, Trash2 } from 'lucide-react';
@@ -8,11 +8,27 @@ import { Table, TableHead, TableRow, TableCell, TableBody } from '../components/
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { useForm } from 'react-hook-form';
+import { apiClient } from '../services/api';
 
 export const Donations: React.FC = () => {
   const { user } = useAuth();
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [completeTargetId, setCompleteTargetId] = useState<string | null>(null);
+  const [bloodBanks, setBloodBanks] = useState<{ id: string; name: string; city: string }[]>([]);
+
+  useEffect(() => {
+    const fetchBloodBanks = async () => {
+      try {
+        const res = await apiClient.get('/donations/blood-banks');
+        if (res.data?.success && res.data?.data) {
+          setBloodBanks(res.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch blood banks:', err);
+      }
+    };
+    fetchBloodBanks();
+  }, []);
 
   const { data: donations = [], bookAppointment, completeAppointment, cancelAppointment, isBooking } = useDonations(
     user?.role === 'DONOR' ? user.id : undefined
@@ -20,7 +36,7 @@ export const Donations: React.FC = () => {
 
   const { register: regBook, handleSubmit: handleBook, reset: resetBook } = useForm({
     defaultValues: {
-      bloodBankId: 'bb-1',
+      bloodBankId: '',
       donationDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     }
   });
@@ -153,11 +169,15 @@ export const Donations: React.FC = () => {
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Blood Bank</label>
             <select
-              {...regBook('bloodBankId')}
+              {...regBook('bloodBankId', { required: 'Please select a blood bank' })}
               className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-rose-500/30"
             >
-              <option value="bb-1">Red Cross Noida (Noida City Center)</option>
-              <option value="bb-2">Max Blood Bank (Connaught Place)</option>
+              <option value="">Select a Blood Bank...</option>
+              {bloodBanks.map((bb) => (
+                <option key={bb.id} value={bb.id}>
+                  {bb.name} ({bb.city})
+                </option>
+              ))}
             </select>
           </div>
 

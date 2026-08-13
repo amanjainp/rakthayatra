@@ -223,6 +223,30 @@ export class DonationController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Retrieves all verified blood banks in the system.
+   */
+  async getBloodBanks(req: Request, res: Response) {
+    try {
+      const bloodBanks = await prisma.bloodBankProfile.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          address: true,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: bloodBanks,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const donationController = new DonationController();
