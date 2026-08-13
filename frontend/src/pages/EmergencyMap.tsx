@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useMapsLocations, MapMarker } from '../hooks/useMapsLocations';
 import { Navigation, Compass, ShieldAlert, Database, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import toast from 'react-hot-toast';
 
 export const EmergencyMap: React.FC = () => {
   const [center, setCenter] = useState({ latitude: 28.6139, longitude: 77.209 }); // Delhi/Noida default
@@ -16,17 +17,23 @@ export const EmergencyMap: React.FC = () => {
   // Attempt live location grab
   const handleLocateMe = () => {
     if (navigator.geolocation) {
+      toast.loading('Detecting location...', { id: 'geo' });
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setCenter({
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
           });
+          toast.success('Location updated successfully', { id: 'geo' });
         },
-        () => {
-          // fallback silently
-        }
+        (err) => {
+          console.error(err);
+          toast.error(`Location access failed: ${err.message || 'Permission denied'}. Using Noida/Delhi default.`, { id: 'geo' });
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
       );
+    } else {
+      toast.error('Geolocation is not supported by this browser.');
     }
   };
 
