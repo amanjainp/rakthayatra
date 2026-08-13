@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 // Zod Validation Schemas
 const registerSchema = z
   .object({
-    donorProfileId: z.string().uuid('Invalid donor profile ID format.'),
+    donorProfileId: z.string().uuid('Invalid donor profile ID format.').optional(),
     bloodBankId: z.string().uuid('Invalid blood bank ID format.').optional(),
     donationCampId: z.string().uuid('Invalid donation camp ID format.').optional(),
     donationDate: z.string().refine((val) => !isNaN(Date.parse(val)), {
@@ -72,9 +72,21 @@ export class DonationController {
   async register(req: AuthenticatedRequest, res: Response) {
     try {
       const parsed = registerSchema.parse(req.body);
+
+      let donorProfileId = parsed.donorProfileId;
+      if (!donorProfileId) {
+        const profile = await prisma.donorProfile.findFirst({
+          where: { userId: req.user?.userId },
+        });
+        if (!profile) {
+          throw new BadRequestError('User profile is not registered as a Donor.');
+        }
+        donorProfileId = profile.id;
+      }
+
       const appointment = await donationService.registerAppointment(
         {
-          donorProfileId: parsed.donorProfileId,
+          donorProfileId,
           bloodBankId: parsed.bloodBankId,
           donationCampId: parsed.donationCampId,
           donationDate: new Date(parsed.donationDate),

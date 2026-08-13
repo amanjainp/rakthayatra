@@ -68,12 +68,8 @@ export const useDonations = (donorId?: string) => {
       toast.success('Donation appointment scheduled successfully');
     },
     onError: (err: any) => {
-      const errorMsg = err?.response?.data?.message || err?.message;
-      if (errorMsg && errorMsg.includes('deferral')) {
-        toast.error(`Booking Failed: ${errorMsg}`);
-      } else {
-        toast.success('Offline Mode: Booked appointment successfully');
-      }
+      const errorMsg = err?.response?.data?.error?.message || err?.message || 'Failed to schedule donation appointment.';
+      toast.error(`Booking Failed: ${errorMsg}`);
     },
   });
 
