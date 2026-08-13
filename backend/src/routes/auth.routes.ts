@@ -40,14 +40,43 @@ router.post('/resend-otp', authController.resendOtp);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
 // Test Authenticated Route (GET /me)
-router.get('/me', authenticate, (req: AuthenticatedRequest, res) => {
-  return res.status(200).json({
-    success: true,
-    data: {
-      user: req.user,
-    },
-  });
+router.get('/me', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user?.userId },
+      include: {
+        role: true,
+        donorProfile: true,
+        hospitalProfile: true,
+        bloodBankProfile: true,
+      },
+    });
+
+    if (user) {
+      // Remove password hash from response
+      (user as any).passwordHash = undefined;
+      (user as any).userId = user.id;
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        user,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to retrieve session user details.',
+      },
+    });
+  }
 });
 
 // Test RBAC Route (GET /admin-only)

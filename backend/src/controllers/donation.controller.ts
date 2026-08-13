@@ -2,8 +2,11 @@ import { Response } from 'express';
 import { z } from 'zod';
 import { donationService } from '../services/donation.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
-import { AppError, BadRequestError } from '../errors/app-error';
+import { AppError, BadRequestError, NotFoundError } from '../errors/app-error';
+import { PrismaClient } from '@prisma/client';
 import logger from '../config/logger';
+
+const prisma = new PrismaClient();
 
 // Zod Validation Schemas
 const registerSchema = z
@@ -145,8 +148,22 @@ export class DonationController {
         throw new BadRequestError('Invalid donor profile ID parameter.');
       }
 
+      let donorProfile = await prisma.donorProfile.findFirst({
+        where: { id },
+      });
+
+      if (!donorProfile) {
+        donorProfile = await prisma.donorProfile.findFirst({
+          where: { userId: id },
+        });
+      }
+
+      if (!donorProfile) {
+        throw new NotFoundError('Donor profile record not found.');
+      }
+
       const parsed = querySchema.parse(req.query);
-      const history = await donationService.getDonorHistory(id, {
+      const history = await donationService.getDonorHistory(donorProfile.id, {
         page: parsed.page,
         limit: parsed.limit,
       });
@@ -165,17 +182,31 @@ export class DonationController {
    */
   async getStats(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
-        throw new BadRequestError('Invalid donor profile ID parameter.');
-      }
+       const { id } = req.params;
+       if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+         throw new BadRequestError('Invalid donor profile ID parameter.');
+       }
 
-      const stats = await donationService.getDonorStatistics(id);
+       let donorProfile = await prisma.donorProfile.findFirst({
+         where: { id },
+       });
 
-      return res.status(200).json({
-        success: true,
-        data: stats,
-      });
+       if (!donorProfile) {
+         donorProfile = await prisma.donorProfile.findFirst({
+           where: { userId: id },
+         });
+       }
+
+       if (!donorProfile) {
+         throw new NotFoundError('Donor profile record not found.');
+       }
+
+       const stats = await donationService.getDonorStatistics(donorProfile.id);
+
+       return res.status(200).json({
+         success: true,
+         data: stats,
+       });
     } catch (error: any) {
       return handleControllerError(res, error);
     }

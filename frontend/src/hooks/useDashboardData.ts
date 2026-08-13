@@ -74,20 +74,65 @@ export const useDonorDashboardData = (userId?: string) => {
           ? await apiClient.get(`/donations/donor/${userId}/stats`).catch(() => null)
           : null;
 
-        const stats = statsRes?.data?.data || { totalDonations: 0, lastDonationDate: null, isEligible: true, nextEligibleDate: new Date() };
+        const stats = statsRes?.data?.data || { totalDonations: 0, lastDonationDate: null, isEligibleToDonate: true, nextEligibleDate: null };
+        const isEligible = stats.isEligibleToDonate !== false;
+
+        // 1. Fetch matching emergency requests within 50km of the donor's coordinates
+        let matchingRequestsCount = 0;
+        try {
+          const userRes = await apiClient.get('/auth/me').catch(() => null);
+          const donorProfile = userRes?.data?.data?.user?.donorProfile;
+          if (donorProfile?.latitude && donorProfile?.longitude) {
+            const mapRes = await apiClient.get('/requests/map', {
+              params: {
+                latitude: donorProfile.latitude,
+                longitude: donorProfile.longitude,
+                radius: 50,
+              },
+            });
+            const markers = mapRes?.data?.data || [];
+            matchingRequestsCount = markers.filter((m: any) => m.type === 'EMERGENCY_REQUEST').length;
+          }
+        } catch (err) {
+          console.error('Error fetching nearby matching requests:', err);
+        }
+
+        // 2. Fetch real-time donation activities history
+        let activities: RecentActivity[] = [];
+        try {
+          const historyRes = userId
+            ? await apiClient.get(`/donations/donor/${userId}`).catch(() => null)
+            : null;
+          const history = historyRes?.data?.data?.items || historyRes?.data?.data || [];
+          
+          activities = history.map((item: any) => {
+            const isCompleted = item.status === 'COMPLETED';
+            return {
+              id: item.id,
+              title: isCompleted ? 'Donation Completed' : item.status === 'CANCELLED' ? 'Donation Cancelled' : 'Appointment Registered',
+              subtitle: `${item.unitsDonated || 1} Unit at ${item.donationCamp?.name || item.bloodBank?.name || 'Local Facility'}.`,
+              time: item.donationDate ? new Date(item.donationDate).toLocaleDateString() : 'Recent',
+              status: isCompleted ? 'success' : item.status === 'CANCELLED' ? 'danger' : 'info'
+            } as RecentActivity;
+          });
+        } catch (err) {
+          console.error('Error fetching donation activities:', err);
+        }
+
+        if (activities.length === 0) {
+          activities = [
+            { id: 'welcome', title: 'Welcome to LifeLink!', subtitle: 'Book your first donation appointment to save lives.', time: 'Now', status: 'info' }
+          ];
+        }
 
         return {
           metrics: [
-            { label: 'My Total Donations', value: stats.totalDonations || 3, change: 'Lifetime units', changeType: 'increase' },
-            { label: 'Donor Status', value: stats.isEligible ? 'Eligible' : 'Deferred', change: stats.isEligible ? 'Active' : 'Resting', changeType: stats.isEligible ? 'success' : 'warning' },
+            { label: 'My Total Donations', value: stats.totalDonations || 0, change: 'Lifetime units', changeType: 'increase' },
+            { label: 'Donor Status', value: isEligible ? 'Eligible' : 'Deferred', change: isEligible ? 'Active' : 'Resting', changeType: isEligible ? 'success' : 'warning' },
             { label: 'Next Eligible Date', value: stats.nextEligibleDate ? new Date(stats.nextEligibleDate).toLocaleDateString() : 'Immediate', change: '90-day interval rule', changeType: 'neutral' },
-            { label: 'Matching Requests Nearby', value: 5, change: 'Within 50km radius', changeType: 'danger' },
+            { label: 'Matching Requests Nearby', value: matchingRequestsCount, change: 'Within 50km radius', changeType: 'danger' },
           ] as MetricCard[],
-          activities: [
-            { id: '1', title: 'Eligibility Questionnaire Submitted', subtitle: 'Screened eligible for standard donation.', time: 'Today', status: 'success' },
-            { id: '2', title: 'Donation Completed', subtitle: '1 Unit O+ donated at Sector 62 Camp.', time: '3 months ago', status: 'success' },
-            { id: '3', title: 'Appointment Registered', subtitle: 'Volunteered for Fortis Camp registration.', time: '4 months ago', status: 'info' },
-          ] as RecentActivity[],
+          activities,
         };
       } catch {
         return { metrics: [], activities: [] };
