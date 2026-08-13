@@ -68,7 +68,7 @@ export const useBloodRequests = (filters?: { status?: string }) => {
   });
 
   const createRequestMutation = useMutation({
-    mutationFn: async (data: { bloodGroup: string; units: number; urgency: string; latitude: number; longitude: number }) => {
+    mutationFn: async (data: { bloodGroup: string; unitsRequired: number; urgency: string; locationName: string; latitude: number; longitude: number }) => {
       const res = await apiClient.post('/requests', data);
       return res.data;
     },
@@ -76,8 +76,9 @@ export const useBloodRequests = (filters?: { status?: string }) => {
       queryClient.invalidateQueries({ queryKey: ['bloodRequests'] });
       toast.success('Blood request filed successfully');
     },
-    onError: () => {
-      toast.success('Offline Mode: Blood request simulated successfully');
+    onError: (err: any) => {
+      const errMsg = err?.response?.data?.error?.message || err?.message || 'Failed to file blood request.';
+      toast.error(`Error: ${errMsg}`);
     },
   });
 

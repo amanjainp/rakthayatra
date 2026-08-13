@@ -9,6 +9,17 @@ import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { useForm } from 'react-hook-form';
 
+const BLOOD_GROUP_MAP: Record<string, string> = {
+  'A+': 'A_POS',
+  'A-': 'A_NEG',
+  'B+': 'B_POS',
+  'B-': 'B_NEG',
+  'AB+': 'AB_POS',
+  'AB-': 'AB_NEG',
+  'O+': 'O_POS',
+  'O-': 'O_NEG',
+};
+
 export const BloodRequests: React.FC = () => {
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState('');
@@ -23,6 +34,7 @@ export const BloodRequests: React.FC = () => {
       bloodGroup: 'O+',
       units: 1,
       urgency: 'NORMAL',
+      locationName: 'City Center Area',
       latitude: 28.6139,
       longitude: 77.209,
     }
@@ -31,9 +43,10 @@ export const BloodRequests: React.FC = () => {
   const onCreateSubmit = async (values: any) => {
     try {
       await createRequest({
-        bloodGroup: values.bloodGroup,
-        units: Number(values.units),
+        bloodGroup: BLOOD_GROUP_MAP[values.bloodGroup] || 'O_POS',
+        unitsRequired: Number(values.units),
         urgency: values.urgency,
+        locationName: values.locationName,
         latitude: Number(values.latitude),
         longitude: Number(values.longitude),
       });
@@ -186,6 +199,12 @@ export const BloodRequests: React.FC = () => {
               <option value="EMERGENCY">EMERGENCY (24 hours matching broadcast)</option>
             </select>
           </div>
+
+          <Input
+            label="Location Name (e.g. City Hospital or Landmark)"
+            {...register('locationName', { required: 'Location name is required' })}
+            error={errors.locationName?.message}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <Input
