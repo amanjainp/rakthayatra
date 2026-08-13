@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 
 // Zod Validation Schemas
 const submitSchema = z.object({
-  donorProfileId: z.string().uuid('Invalid donor profile ID format.'),
+  donorProfileId: z.string().uuid('Invalid donor profile ID format.').optional(),
   weight: z.number().positive('Weight must be a positive number.'),
   hasInfections: z.boolean(),
   recentTattooOrPiercing: z.boolean(),
@@ -58,20 +58,35 @@ export class MedicalEligibilityController {
     try {
       const parsed = submitSchema.parse(req.body);
 
-      // Security Ownership Check
-      const donor = await prisma.donorProfile.findUnique({
-        where: { id: parsed.donorProfileId },
-      });
+      let donorProfileId = parsed.donorProfileId;
+      let donor = null;
+
+      if (donorProfileId) {
+        donor = await prisma.donorProfile.findUnique({
+          where: { id: donorProfileId },
+        });
+        if (!donor) {
+          donor = await prisma.donorProfile.findFirst({
+            where: { userId: donorProfileId },
+          });
+        }
+      } else {
+        donor = await prisma.donorProfile.findFirst({
+          where: { userId: req.user?.userId },
+        });
+      }
+
       if (!donor) {
         throw new NotFoundError('Donor profile not found.');
       }
+      donorProfileId = donor.id;
 
       if (req.user?.role === 'DONOR' && donor.userId !== req.user?.userId) {
         throw new ForbiddenError('You do not have permission to update eligibility for this profile.');
       }
 
       const eligibility = await medicalEligibilityService.submitQuestionnaire(
-        parsed.donorProfileId,
+        donorProfileId,
         {
           weight: parsed.weight,
           hasInfections: parsed.hasInfections,
@@ -97,12 +112,26 @@ export class MedicalEligibilityController {
    */
   async getStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params; // Donor Profile ID
+      const { id } = req.params; // Donor Profile ID or User ID
       if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
         throw new BadRequestError('Invalid donor profile ID parameter.');
       }
 
-      const eligibility = await medicalEligibilityService.getDonorEligibility(id);
+      let donor = await prisma.donorProfile.findUnique({
+        where: { id },
+      });
+
+      if (!donor) {
+        donor = await prisma.donorProfile.findFirst({
+          where: { userId: id },
+        });
+      }
+
+      if (!donor) {
+        throw new NotFoundError('Donor profile record not found.');
+      }
+
+      const eligibility = await medicalEligibilityService.getDonorEligibility(donor.id);
       if (!eligibility) {
         return res.status(200).json({
           success: true,
@@ -125,12 +154,26 @@ export class MedicalEligibilityController {
    */
   async getHistory(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params; // Donor Profile ID
+      const { id } = req.params; // Donor Profile ID or User ID
       if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
         throw new BadRequestError('Invalid donor profile ID parameter.');
       }
 
-      const history = await medicalEligibilityService.getEligibilityHistory(id);
+      let donor = await prisma.donorProfile.findUnique({
+        where: { id },
+      });
+
+      if (!donor) {
+        donor = await prisma.donorProfile.findFirst({
+          where: { userId: id },
+        });
+      }
+
+      if (!donor) {
+        throw new NotFoundError('Donor profile record not found.');
+      }
+
+      const history = await medicalEligibilityService.getEligibilityHistory(donor.id);
 
       return res.status(200).json({
         success: true,

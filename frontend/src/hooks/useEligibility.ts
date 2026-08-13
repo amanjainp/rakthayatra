@@ -17,9 +17,9 @@ export const useEligibility = (donorId?: string) => {
       try {
         if (!donorId) return null;
         const res = await apiClient.get(`/eligibility/donor/${donorId}`).catch(() => null);
-        return (res?.data?.data || {
+        return (res?.data?.data?.eligibility || {
           isEligible: true,
-          nextEligibleDate: new Date().toISOString(),
+          nextEligibleDate: null,
           lastDonationDate: null,
         }) as EligibilityStatus;
       } catch {
@@ -52,9 +52,9 @@ export const useEligibility = (donorId?: string) => {
         toast.error('You are currently deferred from blood donation due to safety standards.');
       }
     },
-    onError: () => {
-      // Offline fallback simulation
-      toast.success('Offline Mode: Assessment submitted and updated successfully');
+    onError: (err: any) => {
+      const errorMsg = err?.response?.data?.error?.message || err?.message || 'Failed to submit medical eligibility screening.';
+      toast.error(`Submission Failed: ${errorMsg}`);
     },
   });
 
