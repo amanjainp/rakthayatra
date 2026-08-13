@@ -52,7 +52,7 @@ export const useEligibility = (donorId?: string) => {
       queryClient.invalidateQueries({ queryKey: ['eligibility'] });
       queryClient.invalidateQueries({ queryKey: ['donorDashboard'] });
       
-      const isEligible = resData?.data?.isEligible;
+      const isEligible = resData?.data?.eligibility?.isEligible;
       if (isEligible) {
         toast.success('Congratulations! You are medically eligible to donate blood.');
       } else {
