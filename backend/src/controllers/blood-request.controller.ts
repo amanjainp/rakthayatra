@@ -338,6 +338,30 @@ export class BloodRequestController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Translates coordinates to a human-readable address.
+   */
+  async reverseGeocode(req: Request, res: Response) {
+    try {
+      const lat = parseFloat(req.query.latitude as string);
+      const lng = parseFloat(req.query.longitude as string);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        throw new BadRequestError('Latitude and Longitude query parameters are required.');
+      }
+
+      const { mapsService } = require('../services/maps.service');
+      const address = await mapsService.reverseGeocode(lat, lng);
+
+      return res.status(200).json({
+        success: true,
+        data: { address },
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const bloodRequestController = new BloodRequestController();

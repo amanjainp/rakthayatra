@@ -3,6 +3,7 @@ import { useMapsLocations, MapMarker } from '../hooks/useMapsLocations';
 import { Navigation, Compass, ShieldAlert, Database, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
+import { apiClient } from '../services/api';
 
 export const EmergencyMap: React.FC = () => {
   const [center, setCenter] = useState({ latitude: 28.6139, longitude: 77.209 }); // Delhi/Noida default
@@ -11,8 +12,28 @@ export const EmergencyMap: React.FC = () => {
   const [showBanks, setShowBanks] = useState(true);
   const [showRequests, setShowRequests] = useState(true);
   const [activeMarker, setActiveMarker] = useState<MapMarker | null>(null);
+  const [address, setAddress] = useState('Noida / Delhi Grid active');
 
   const { data: markers = [], isLoading } = useMapsLocations(center, radius);
+
+  useEffect(() => {
+    const fetchAddress = async () => {
+      try {
+        const res = await apiClient.get('/requests/reverse-geocode', {
+          params: {
+            latitude: center.latitude,
+            longitude: center.longitude,
+          },
+        });
+        if (res.data?.data?.address) {
+          setAddress(res.data.data.address);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchAddress();
+  }, [center]);
 
   // Attempt live location grab
   const handleLocateMe = () => {
@@ -206,9 +227,10 @@ export const EmergencyMap: React.FC = () => {
               </svg>
 
               {/* HUD controls labels overlay */}
-              <div className="absolute top-4 left-4 p-3 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl space-y-1">
+              <div className="absolute top-4 left-4 p-3 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl space-y-1 max-w-[200px] sm:max-w-[250px]">
                 <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">HUD Status Channels</span>
-                <span className="block text-xs font-semibold text-white">Noida / Delhi Grid active</span>
+                <span className="block text-xs font-semibold text-white truncate" title={address}>{address}</span>
+                <span className="block text-[9px] text-slate-400">Coords: {center.latitude.toFixed(4)}°, {center.longitude.toFixed(4)}°</span>
                 <span className="block text-[9px] text-slate-400">Scale: 1 Ring = {(radius / 3).toFixed(1)} km</span>
               </div>
             </div>
