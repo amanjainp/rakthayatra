@@ -235,6 +235,109 @@ export class BloodRequestController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Retrieves real-time coordinates/markers for compatible donors, blood banks, and emergency requests.
+   */
+  async getMapLocations(req: Request, res: Response) {
+    try {
+      const lat = parseFloat(req.query.latitude as string) || 28.6139;
+      const lng = parseFloat(req.query.longitude as string) || 77.209;
+      const radiusKm = parseFloat(req.query.radius as string) || 25.0;
+
+      // 1. Fetch Active Donors
+      const donors = await prisma.donorProfile.findMany({
+        where: {
+          isAvailable: true,
+          deletedAt: null,
+          user: { status: 'ACTIVE' },
+        },
+      });
+
+      // 2. Fetch Active Blood Banks
+      const bloodBanks = await prisma.bloodBankProfile.findMany({
+        where: {
+          deletedAt: null,
+          user: { status: 'ACTIVE' },
+        },
+        include: {
+          inventory: {
+            where: { status: 'AVAILABLE' }
+          }
+        }
+      });
+
+      // 3. Fetch Emergency Requests
+      const requests = await prisma.bloodRequest.findMany({
+        where: {
+          urgency: 'EMERGENCY',
+          status: { in: ['PENDING', 'APPROVED'] }
+        }
+      });
+
+      const markers: any[] = [];
+      const { mapsService } = require('../services/maps.service');
+
+      // Process Donors
+      for (const donor of donors) {
+        const dist = mapsService.calculateDistance(lat, lng, donor.latitude, donor.longitude);
+        if (dist <= radiusKm) {
+          markers.push({
+            id: `donor-${donor.id}`,
+            type: 'DONOR',
+            name: donor.fullName,
+            bloodGroup: donor.bloodGroup,
+            latitude: donor.latitude,
+            longitude: donor.longitude,
+            contact: donor.phone,
+            distanceKm: dist,
+          });
+        }
+      }
+
+      // Process Blood Banks
+      for (const bank of bloodBanks) {
+        const dist = mapsService.calculateDistance(lat, lng, bank.latitude, bank.longitude);
+        if (dist <= radiusKm) {
+          const availableBags = bank.inventory.reduce((sum, item) => sum + item.unitsCount, 0);
+          markers.push({
+            id: `bank-${bank.id}`,
+            type: 'BLOOD_BANK',
+            name: bank.name,
+            latitude: bank.latitude,
+            longitude: bank.longitude,
+            contact: bank.phone,
+            availableBags,
+            distanceKm: dist,
+          });
+        }
+      }
+
+      // Process Emergency Requests
+      for (const reqRecord of requests) {
+        const dist = mapsService.calculateDistance(lat, lng, reqRecord.latitude, reqRecord.longitude);
+        if (dist <= radiusKm) {
+          markers.push({
+            id: `request-${reqRecord.id}`,
+            type: 'EMERGENCY_REQUEST',
+            name: `EMERGENCY: ${reqRecord.locationName}`,
+            bloodGroup: reqRecord.bloodGroup,
+            latitude: reqRecord.latitude,
+            longitude: reqRecord.longitude,
+            contact: `Needs ${reqRecord.unitsRequired} Bags`,
+            distanceKm: dist,
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: markers,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const bloodRequestController = new BloodRequestController();

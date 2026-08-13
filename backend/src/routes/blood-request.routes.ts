@@ -27,7 +27,10 @@ router.post('/:id/fulfill', authenticate, requireRoles(['HOSPITAL', 'BLOOD_BANK'
 // 5. Cancel request (Authenticated users - ownership checked in controller)
 router.post('/:id/cancel', authenticate, (req, res) => bloodRequestController.cancel(req, res));
 
-// 6. Search blood requests (Authenticated users)
+// 6. Get map coordinates (Authenticated users)
+router.get('/map', authenticate, (req, res) => bloodRequestController.getMapLocations(req, res));
+
+// 7. Search blood requests (Authenticated users)
 router.get('/', authenticate, (req, res) => bloodRequestController.search(req, res));
 
 // 7. Trigger expired requests sweep (Admins only)
