@@ -38,7 +38,14 @@ export const useEligibility = (donorId?: string) => {
       isPregnantOrLactating: boolean;
       consentDpdp: boolean;
     }) => {
-      const res = await apiClient.post('/eligibility', data);
+      const payload = {
+        weight: data.weight,
+        hasInfections: data.hadInfections,
+        recentTattooOrPiercing: data.recentTattooOrPiercing,
+        recentSurgery: data.recentSurgery,
+        isPregnantOrBreastfeeding: data.isPregnantOrLactating,
+      };
+      const res = await apiClient.post('/eligibility', payload);
       return res.data;
     },
     onSuccess: (resData) => {
