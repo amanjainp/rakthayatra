@@ -17,18 +17,36 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const formatUserObject = (rawUser: any): User | null => {
+  if (!rawUser) return null;
+  const user = { ...rawUser };
+  if (user.role && typeof user.role === 'object') {
+    user.role = user.role.name;
+  }
+  return user;
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const setUserAndStore = (u: any) => {
+    const formatted = formatUserObject(u);
+    setUser(formatted);
+    if (formatted) {
+      localStorage.setItem(USER_KEY, JSON.stringify(formatted));
+    } else {
+      localStorage.removeItem(USER_KEY);
+    }
+  };
 
   const refreshUser = async () => {
     try {
       const response = await apiClient.get('/auth/me');
       if (response.data?.success && response.data?.data?.user) {
         const userData = response.data.data.user;
-        setUser(userData);
-        localStorage.setItem(USER_KEY, JSON.stringify(userData));
+        setUserAndStore(userData);
       }
     } catch (err) {
       // If user retrieval fails, clear invalid tokens
@@ -51,7 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (storedToken && storedUser) {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setUser(formatUserObject(JSON.parse(storedUser)));
         
         // Asynchronously check/update user state in background
         refreshUser().finally(() => {
@@ -82,11 +100,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const authData = response.data.data;
       
       // Save tokens
+      // Save tokens
       localStorage.setItem(ACCESS_TOKEN_KEY, authData.accessToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(authData.user));
-      
       setToken(authData.accessToken);
-      setUser(authData.user);
+      setUserAndStore(authData.user);
       
       return response.data;
     } catch (err: any) {
@@ -117,9 +134,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Save tokens if registration/login OTP verification returned user details
         if (authData.accessToken && authData.user) {
           localStorage.setItem(ACCESS_TOKEN_KEY, authData.accessToken);
-          localStorage.setItem(USER_KEY, JSON.stringify(authData.user));
           setToken(authData.accessToken);
-          setUser(authData.user);
+          setUserAndStore(authData.user);
         }
       }
       return response.data;
