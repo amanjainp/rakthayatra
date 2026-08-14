@@ -107,7 +107,7 @@ function App() {
                 <Route
                   path="/requests"
                   element={
-                    <RoleProtectedRoute allowedRoles={['PATIENT', 'HOSPITAL', 'ADMIN']}>
+                    <RoleProtectedRoute allowedRoles={['PATIENT', 'HOSPITAL', 'ADMIN', 'BLOOD_BANK']}>
                       <BloodRequests />
                     </RoleProtectedRoute>
                   }
