@@ -11,7 +11,7 @@ export const PatientDashboard: React.FC = () => {
   const quickActions = [
     { label: 'Submit Blood Request', href: '/requests', desc: 'File an emergency or normal request for compatible blood units.', icon: <Plus className="w-5 h-5" /> },
     { label: 'Track My Requests', href: '/requests', desc: 'Inspect fulfillment progress and active allocations.', icon: <FileText className="w-5 h-5" /> },
-    { label: 'Find Blood Banks', href: '/patient/dashboard', desc: 'Locate nearby storage banks or facility centers.', icon: <Search className="w-5 h-5" /> },
+    { label: 'Find Blood Banks', href: '/emergency-map', desc: 'Locate nearby storage banks or facility centers.', icon: <Search className="w-5 h-5" /> },
     { label: 'My Recipient Profile', href: '/profile', desc: 'Update contact details or download emergency records.', icon: <User className="w-5 h-5" /> },
   ];
 
