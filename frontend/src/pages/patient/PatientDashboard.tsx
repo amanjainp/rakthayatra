@@ -1,11 +1,12 @@
 import React from 'react';
 import { usePatientDashboardData } from '../../hooks/useDashboardData';
 import { Activity, Plus, Search, FileText, User } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export const PatientDashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data, isLoading } = usePatientDashboardData();
 
   const quickActions = [
@@ -60,10 +61,10 @@ export const PatientDashboard: React.FC = () => {
           <h3 className="text-lg font-bold text-white font-display">Actions Ledger</h3>
           <div className="grid sm:grid-cols-2 gap-4">
             {quickActions.map((action, idx) => (
-              <Link
+              <div
                 key={idx}
-                to={action.href}
-                className="p-5 rounded-2xl border border-slate-800/60 bg-slate-900/10 hover:bg-slate-900/30 hover:border-rose-500/20 transition-all flex gap-4 group"
+                onClick={() => navigate(action.href)}
+                className="p-5 rounded-2xl border border-slate-800/60 bg-slate-900/10 hover:bg-slate-900/30 hover:border-rose-500/20 transition-all flex gap-4 group cursor-pointer"
               >
                 <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-800 border border-slate-700/80 text-rose-500 flex items-center justify-center group-hover:scale-110 transition-transform">
                   {action.icon}
@@ -72,7 +73,7 @@ export const PatientDashboard: React.FC = () => {
                   <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{action.label}</h4>
                   <p className="text-xs text-slate-500 leading-normal">{action.desc}</p>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
