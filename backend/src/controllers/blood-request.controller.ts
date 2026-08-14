@@ -299,7 +299,7 @@ export class BloodRequestController {
       for (const bank of bloodBanks) {
         const dist = mapsService.calculateDistance(lat, lng, bank.latitude, bank.longitude);
         if (dist <= radiusKm) {
-          const availableBags = bank.inventory.reduce((sum, item) => sum + item.unitsCount, 0);
+          const availableBags = bank.inventory.reduce((sum: number, item: any) => sum + item.unitsCount, 0);
           markers.push({
             id: `bank-${bank.id}`,
             type: 'BLOOD_BANK',

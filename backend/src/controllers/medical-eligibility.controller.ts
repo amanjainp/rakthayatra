@@ -86,7 +86,7 @@ export class MedicalEligibilityController {
       }
 
       const eligibility = await medicalEligibilityService.submitQuestionnaire(
-        donorProfileId,
+        donorProfileId!,
         {
           weight: parsed.weight,
           hasInfections: parsed.hasInfections,

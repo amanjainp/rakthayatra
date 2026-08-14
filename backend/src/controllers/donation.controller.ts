@@ -86,7 +86,7 @@ export class DonationController {
 
       const appointment = await donationService.registerAppointment(
         {
-          donorProfileId,
+          donorProfileId: donorProfileId!,
           bloodBankId: parsed.bloodBankId,
           donationCampId: parsed.donationCampId,
           donationDate: new Date(parsed.donationDate),
