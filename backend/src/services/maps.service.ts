@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import logger from '../config/logger';
 import { cacheService } from './cache.service';
 import { BadRequestError, InternalServerError } from '../errors/app-error';
+import https from 'https';
 
 const prisma = new PrismaClient();
 
@@ -92,7 +93,34 @@ export class MapsService {
 
     if (this.isMockMode) {
       logger.info(`[MOCK] Reverse geocoding coords: ${latitude},${longitude}`);
-      const mockAddress = 'Malleshwaram, Bengaluru, Karnataka, India';
+      
+      const mockAddress = await new Promise<string>((resolve) => {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+        const options = {
+          headers: {
+            'User-Agent': 'Rakthayatra-Platform'
+          }
+        };
+        https.get(url, options, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: any) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed && parsed.display_name) {
+                resolve(parsed.display_name);
+              } else {
+                resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+              }
+            } catch {
+              resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+            }
+          });
+        }).on('error', () => {
+          resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+        });
+      });
+
       await cacheService.set(cacheKey, mockAddress, 86400);
       return mockAddress;
     }
