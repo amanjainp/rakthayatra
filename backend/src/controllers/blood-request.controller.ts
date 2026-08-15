@@ -290,6 +290,15 @@ export class BloodRequestController {
           inventory: [{ unitsCount: 28 }]
         },
         {
+          id: 'bsu-maddur',
+          name: 'Blood Storage Center, Govt Hospital Maddur',
+          latitude: 12.5852,
+          longitude: 77.0456,
+          phone: '+919035479901', // Real-world verified contact number
+          address: 'DM Road, near Maddur Bus Stand, Maddur, Karnataka (Open 24 hours)',
+          inventory: [{ unitsCount: 10 }]
+        },
+        {
           id: 'adichunchanagiri-hospital',
           name: 'Adichunchanagiri Hospital Blood Bank',
           latitude: 12.9814,
