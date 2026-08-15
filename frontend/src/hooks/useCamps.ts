@@ -53,7 +53,7 @@ export const useCamps = () => {
             bloodBankName: 'CurePlus Blood Centre',
             latitude: 12.3550,
             longitude: 76.6200,
-            externalRegistrationUrl: null,
+            externalRegistrationUrl: 'https://cureplusbloodbank.com/',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },

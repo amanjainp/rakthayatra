@@ -362,7 +362,7 @@ export class DonationCampService {
         startDate: new Date('2026-08-16T09:00:00Z'),
         endDate: new Date('2026-08-18T18:00:00Z'),
         status: 'UPCOMING' as any,
-        externalRegistrationUrl: null
+        externalRegistrationUrl: 'https://cureplusbloodbank.com/'
       },
       {
         name: 'Juhar Parivar Independence Drive',

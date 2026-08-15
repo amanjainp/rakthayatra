@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCamps } from '../hooks/useCamps';
 import { useAuth } from '../hooks/useAuth';
-import { Calendar, Plus, MapPin, Sparkles, Megaphone, UserPlus, Users } from 'lucide-react';
+import { Calendar, Plus, MapPin, Megaphone, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
@@ -13,7 +13,7 @@ export const DonationCamps: React.FC = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [volunteerTargetId, setVolunteerTargetId] = useState<string | null>(null);
 
-  const { data: camps = [], createCamp, registerDonor, registerVolunteer, associateHospital, isCreatingCamp } = useCamps();
+  const { data: camps = [], createCamp, registerVolunteer, associateHospital, isCreatingCamp } = useCamps();
 
   const { register: regCamp, handleSubmit: handleCamp, reset: resetCamp } = useForm({
     defaultValues: {
@@ -69,10 +69,6 @@ export const DonationCamps: React.FC = () => {
     }
   };
 
-  const handleAttend = async (campId: string) => {
-    await registerDonor(campId);
-  };
-
   const handleHospitalAssociate = async (campId: string) => {
     if (!user) return;
     await associateHospital({ campId, hospitalId: user.id });
@@ -126,28 +122,15 @@ export const DonationCamps: React.FC = () => {
 
             <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/60">
               <div className="flex flex-wrap gap-2">
-                {isDonor && (
-                  <>
-                    {!camp.externalRegistrationUrl ? (
-                      <>
-                        <Button variant="primary" size="sm" onClick={() => handleAttend(camp.id)} className="flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5" /> Attend Camp
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setVolunteerTargetId(camp.id)} className="flex items-center gap-1">
-                          <UserPlus className="w-3.5 h-3.5" /> Volunteer
-                        </Button>
-                      </>
-                    ) : (
-                      <a
-                        href={camp.externalRegistrationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center rounded-xl text-xs font-semibold h-9 px-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all gap-1.5"
-                      >
-                        Register on Official Website
-                      </a>
-                    )}
-                  </>
+                {isDonor && camp.externalRegistrationUrl && (
+                  <a
+                    href={camp.externalRegistrationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl text-xs font-semibold h-9 px-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all gap-1.5"
+                  >
+                    Register on Official Website
+                  </a>
                 )}
                 {isHospital && (
                   <Button variant="outline" size="sm" onClick={() => handleHospitalAssociate(camp.id)} className="flex items-center gap-1">
