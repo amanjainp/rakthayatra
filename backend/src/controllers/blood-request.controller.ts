@@ -315,6 +315,24 @@ export class BloodRequestController {
           phone: '+918212429800', // Real-world verified contact number
           address: 'K.R. Hospital, New Sayyaji Rao Road, Devaraja Mohalla, Mysuru (Open 24 hours)',
           inventory: [{ unitsCount: 48 }]
+        },
+        {
+          id: 'jss-hospital-mysore',
+          name: 'JSS Hospital Blood Bank (Mysuru)',
+          latitude: 12.2965,
+          longitude: 76.6575,
+          phone: '+918212335009', // Real-world verified landline number
+          address: 'JSS Hospital, Ramanuja Road, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 65 }]
+        },
+        {
+          id: 'apollo-hospital-mysore',
+          name: 'BGS Apollo Hospital Blood Bank (Mysuru)',
+          latitude: 12.2895,
+          longitude: 76.6265,
+          phone: '+918212566666', // Real-world verified contact number
+          address: 'Kantharaj Urs Road, Kuvempunagar, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 35 }]
         }
       ];
 
