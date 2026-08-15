@@ -126,7 +126,7 @@ export const DonationCamps: React.FC = () => {
 
             <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/60">
               <div className="flex flex-wrap gap-2">
-                {isDonor && (
+                {(isDonor || isAdmin) && (
                   <>
                     {!camp.externalRegistrationUrl ? (
                       <>
