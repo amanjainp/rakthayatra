@@ -257,21 +257,7 @@ export class BloodRequestController {
         },
       });
 
-      // 2. Fetch Active Blood Banks from Database (excluding dummy names and current test user profile)
-      const dbBloodBanks = await prisma.bloodBankProfile.findMany({
-        where: {
-          deletedAt: null,
-          user: {
-            status: 'ACTIVE',
-            NOT: (req as any).user?.userId ? { id: (req as any).user.userId } : {}
-          },
-        },
-        include: {
-          inventory: {
-            where: { status: 'AVAILABLE' }
-          }
-        }
-      });
+
 
       // 3. Fetch Emergency Requests (excluding current test user's requests)
       const requests = await prisma.bloodRequest.findMany({
@@ -313,21 +299,8 @@ export class BloodRequestController {
         }
       ];
 
-      // Combine and filter out dummy placeholder names
-      const allBloodBanks = [
-        ...dbBloodBanks
-          .filter(b => b.name.toLowerCase() !== 'hospital' && b.name.toLowerCase() !== 'dummy')
-          .map(b => ({
-            id: b.id,
-            name: b.name,
-            latitude: b.latitude,
-            longitude: b.longitude,
-            phone: b.phone,
-            address: b.address,
-            inventory: b.inventory
-          })),
-        ...realWorldMandyaBanks
-      ];
+      // Map only the verified real-world blood banks (excluding any database/dashboard test entries)
+      const allBloodBanks = realWorldMandyaBanks;
 
       const markers: any[] = [];
       const { mapsService } = require('../services/maps.service');
