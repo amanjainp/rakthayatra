@@ -128,13 +128,16 @@ export const DonationCamps: React.FC = () => {
               <div className="flex flex-wrap gap-2">
                 {isDonor && (
                   <>
-                    <Button variant="primary" size="sm" onClick={() => handleAttend(camp.id)} className="flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> Attend Camp
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setVolunteerTargetId(camp.id)} className="flex items-center gap-1">
-                      <UserPlus className="w-3.5 h-3.5" /> Volunteer
-                    </Button>
-                    {camp.externalRegistrationUrl && (
+                    {!camp.externalRegistrationUrl ? (
+                      <>
+                        <Button variant="primary" size="sm" onClick={() => handleAttend(camp.id)} className="flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" /> Attend Camp
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setVolunteerTargetId(camp.id)} className="flex items-center gap-1">
+                          <UserPlus className="w-3.5 h-3.5" /> Volunteer
+                        </Button>
+                      </>
+                    ) : (
                       <a
                         href={camp.externalRegistrationUrl}
                         target="_blank"
