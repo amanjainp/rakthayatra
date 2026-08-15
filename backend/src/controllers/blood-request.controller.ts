@@ -303,18 +303,18 @@ export class BloodRequestController {
           name: 'Lions Blood Centre Jeevadhara',
           latitude: 12.3168,
           longitude: 76.6508,
-          phone: '+919379042563', // Real-world verified mobile number
-          address: 'No. 1475, Sayyaji Rao Road, Mandi Mohalla, Mysuru (Open 24 hours)',
+          phone: '+918212444936', // Real-world verified landline number
+          address: 'No. 1475, New Sayyaji Rao Road, Mandi Mohalla, Mysuru (Open 24 hours)',
           inventory: [{ unitsCount: 40 }]
         },
         {
-          id: 'redcross-mysore',
-          name: 'Red Cross Blood Bank Mysuru',
-          latitude: 12.3112,
-          longitude: 76.6565,
-          phone: '+918212521096', // Real-world verified landline number
-          address: 'District Branch, Zilla Panchayat Premises, Mysuru (Open 24 hours)',
-          inventory: [{ unitsCount: 30 }]
+          id: 'kr-hospital-mysore',
+          name: 'K.R. Hospital Blood Bank (Mysuru)',
+          latitude: 12.3160,
+          longitude: 76.6520,
+          phone: '+918212429800', // Real-world verified contact number
+          address: 'K.R. Hospital, New Sayyaji Rao Road, Devaraja Mohalla, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 48 }]
         }
       ];
 
