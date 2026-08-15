@@ -41,7 +41,7 @@ export const DashboardLayout: React.FC = () => {
   const getNavLinks = () => {
     const commonLinks = [
       { name: 'Dashboard', path: ROLE_DASHBOARDS[user?.role || 'DONOR'], icon: HomeIcon },
-      { name: 'Emergency Map', path: '/emergency-map', icon: MapIcon },
+      { name: user?.role === 'DONOR' ? 'Find Nearby' : 'Emergency Map', path: '/emergency-map', icon: MapIcon },
     ];
 
     const roleLinks: Record<string, { name: string; path: string; icon: any }[]> = {
