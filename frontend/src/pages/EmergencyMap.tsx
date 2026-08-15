@@ -164,6 +164,7 @@ export const EmergencyMap: React.FC = () => {
               <h4 className="text-sm font-bold text-white font-display">{activeMarker.name}</h4>
               <div className="text-xs text-slate-400 space-y-1">
                 {activeMarker.contact && <p>Contact: {activeMarker.contact}</p>}
+                {activeMarker.address && <p className="leading-normal">Address: {activeMarker.address}</p>}
                 {activeMarker.availableBags !== undefined && <p>Available: <span className="font-semibold text-emerald-400">{activeMarker.availableBags} Bags</span></p>}
                 <p className="text-[10px] text-slate-600">Location: {activeMarker.latitude.toFixed(4)}°, {activeMarker.longitude.toFixed(4)}°</p>
               </div>

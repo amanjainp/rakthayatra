@@ -9,6 +9,7 @@ export interface MapMarker {
   latitude: number;
   longitude: number;
   contact?: string;
+  address?: string;
   availableBags?: number;
 }
 

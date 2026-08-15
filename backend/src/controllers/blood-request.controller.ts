@@ -289,7 +289,8 @@ export class BloodRequestController {
           name: 'Blood Bank, Mandya MIMS',
           latitude: 12.5292,
           longitude: 76.8953,
-          phone: '+918232220333',
+          phone: '+918232222033', // Corrected phone number format
+          address: '2nd Cross Rd, Tamilians Colony, Nehru Nagar, Mandya (Open 24 hours)',
           inventory: [{ unitsCount: 45 }]
         },
         {
@@ -298,6 +299,7 @@ export class BloodRequestController {
           latitude: 12.5245,
           longitude: 76.8980,
           phone: '+919901511222',
+          address: 'Tridhala Arcade, K V Shankaragowda Rd, V V Nagar, Mandya (Open 24 hours)',
           inventory: [{ unitsCount: 28 }]
         },
         {
@@ -306,6 +308,7 @@ export class BloodRequestController {
           latitude: 12.5312,
           longitude: 76.8998,
           phone: '+918232224455',
+          address: '3rd Cross Rd, Ashok Nagar, Mandya',
           inventory: [{ unitsCount: 15 }]
         }
       ];
@@ -320,6 +323,7 @@ export class BloodRequestController {
             latitude: b.latitude,
             longitude: b.longitude,
             phone: b.phone,
+            address: b.address,
             inventory: b.inventory
           })),
         ...realWorldMandyaBanks
@@ -328,17 +332,44 @@ export class BloodRequestController {
       const markers: any[] = [];
       const { mapsService } = require('../services/maps.service');
 
+      // Jittering / dispersion logic for overlapping markers
+      const seenCoords: { lat: number; lng: number }[] = [];
+      const isTooClose = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        return Math.abs(lat1 - lat2) < 0.0006 && Math.abs(lng1 - lng2) < 0.0006;
+      };
+
+      const getJitteredCoords = (baseLat: number, baseLng: number) => {
+        let latVal = baseLat;
+        let lngVal = baseLng;
+        let angle = 0;
+        let distance = 0.0012; // offset in degrees (approx 130 meters)
+        
+        while (seenCoords.some(c => isTooClose(latVal, lngVal, c.lat, c.lng))) {
+          latVal = baseLat + Math.sin(angle) * distance;
+          lngVal = baseLng + Math.cos(angle) * distance;
+          angle += (2 * Math.PI) / 6;
+          if (angle >= 2 * Math.PI) {
+            angle = 0;
+            distance += 0.0008; // expand radius if still overlapping
+          }
+        }
+        
+        seenCoords.push({ lat: latVal, lng: lngVal });
+        return { lat: latVal, lng: lngVal };
+      };
+
       // Process Donors
       for (const donor of donors) {
         const dist = mapsService.calculateDistance(lat, lng, donor.latitude, donor.longitude);
         if (dist <= radiusKm) {
+          const dispersed = getJitteredCoords(donor.latitude, donor.longitude);
           markers.push({
             id: `donor-${donor.id}`,
             type: 'DONOR',
             name: donor.fullName,
             bloodGroup: donor.bloodGroup,
-            latitude: donor.latitude,
-            longitude: donor.longitude,
+            latitude: dispersed.lat,
+            longitude: dispersed.lng,
             contact: donor.phone,
             distanceKm: dist,
           });
@@ -349,14 +380,16 @@ export class BloodRequestController {
       for (const bank of allBloodBanks) {
         const dist = mapsService.calculateDistance(lat, lng, bank.latitude, bank.longitude);
         if (dist <= radiusKm) {
+          const dispersed = getJitteredCoords(bank.latitude, bank.longitude);
           const availableBags = bank.inventory.reduce((sum: number, item: any) => sum + item.unitsCount, 0);
           markers.push({
             id: `bank-${bank.id}`,
             type: 'BLOOD_BANK',
             name: bank.name,
-            latitude: bank.latitude,
-            longitude: bank.longitude,
+            latitude: dispersed.lat,
+            longitude: dispersed.lng,
             contact: bank.phone,
+            address: bank.address || 'Address not listed',
             availableBags,
             distanceKm: dist,
           });
@@ -367,14 +400,16 @@ export class BloodRequestController {
       for (const reqRecord of requests) {
         const dist = mapsService.calculateDistance(lat, lng, reqRecord.latitude, reqRecord.longitude);
         if (dist <= radiusKm) {
+          const dispersed = getJitteredCoords(reqRecord.latitude, reqRecord.longitude);
           markers.push({
             id: `request-${reqRecord.id}`,
             type: 'EMERGENCY_REQUEST',
             name: `EMERGENCY: ${reqRecord.locationName}`,
             bloodGroup: reqRecord.bloodGroup,
-            latitude: reqRecord.latitude,
-            longitude: reqRecord.longitude,
+            latitude: dispersed.lat,
+            longitude: dispersed.lng,
             contact: `Needs ${reqRecord.unitsRequired} Bags`,
+            address: reqRecord.locationName,
             distanceKm: dist,
           });
         }
