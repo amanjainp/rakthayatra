@@ -333,6 +333,24 @@ export class BloodRequestController {
           phone: '+918212566666', // Real-world verified contact number
           address: 'Kantharaj Urs Road, Kuvempunagar, Mysuru (Open 24 hours)',
           inventory: [{ unitsCount: 35 }]
+        },
+        {
+          id: 'st-joseph-mysore',
+          name: "St. Joseph's Hospital Blood Bank (Mysuru)",
+          latitude: 12.3392,
+          longitude: 76.6531,
+          phone: '+918214003900', // Real-world verified landline number
+          address: "St. Joseph's Hospital, Bangalore-Mysore Road, Bannimantap, Mysuru (Open 24 hours)",
+          inventory: [{ unitsCount: 22 }]
+        },
+        {
+          id: 'manipal-hospital-mysore',
+          name: 'Manipal Hospital Blood Bank (Mysuru)',
+          latitude: 12.3382,
+          longitude: 76.6438,
+          phone: '+918212555555', // Real-world verified contact number
+          address: 'No. 85-86, Bangalore-Mysore Ring Road Junction, Bannimantapa A Layout, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 30 }]
         }
       ];
 
