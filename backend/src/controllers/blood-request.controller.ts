@@ -298,7 +298,7 @@ export class BloodRequestController {
           name: 'Sanjeevini Blood Centre',
           latitude: 12.5245,
           longitude: 76.8980,
-          phone: '+919901511222',
+          phone: '+918232225333', // Corrected phone to official Mandya landline format
           address: 'Tridhala Arcade, K V Shankaragowda Rd, V V Nagar, Mandya (Open 24 hours)',
           inventory: [{ unitsCount: 28 }]
         },

@@ -243,10 +243,12 @@ export const EmergencyMap: React.FC = () => {
   );
 };
 
-// Helper to plot latitude/longitude offsets inside 400x300 canvas grid
+// Helper to plot latitude/longitude offsets inside 400x300 canvas grid with dispersion
 function filteredInventoryCoords(markers: MapMarker[], center: { latitude: number; longitude: number }, radius: number) {
   const scale = 130 / radius; // map radius limit to max ring radius (130px)
-  return markers.map((m) => {
+  
+  // 1. Calculate raw offsets
+  const rawPlotted = markers.map((m) => {
     const latDiff = m.latitude - center.latitude;
     const lngDiff = m.longitude - center.longitude;
 
@@ -257,9 +259,50 @@ function filteredInventoryCoords(markers: MapMarker[], center: { latitude: numbe
     return {
       ...m,
       x: 200 + xOffset,
-      y: 150 - yOffset, // flip Y because canvas starts top-left
+      y: 150 - yOffset,
     };
   });
+
+  // 2. Disperse overlapping coordinates in pixels (min 18px separation)
+  const dispersed: typeof rawPlotted = [];
+  const minDistance = 18;
+  
+  for (const marker of rawPlotted) {
+    let currentX = marker.x;
+    let currentY = marker.y;
+    let angle = 0;
+    let step = 15; // starting pixel offset distance
+    
+    const conflicts = () => {
+      // Prevent overlapping directly on the center radar target (200, 150)
+      const distToCenter = Math.sqrt(Math.pow(currentX - 200, 2) + Math.pow(currentY - 150, 2));
+      if (distToCenter < 12) return true;
+
+      // Prevent overlapping with already placed markers
+      return dispersed.some(d => {
+        const dist = Math.sqrt(Math.pow(currentX - d.x, 2) + Math.pow(currentY - d.y, 2));
+        return dist < minDistance;
+      });
+    };
+
+    while (conflicts()) {
+      currentX = marker.x + Math.cos(angle) * step;
+      currentY = marker.y + Math.sin(angle) * step;
+      angle += Math.PI / 4; // check in 8 radial directions
+      if (angle >= 2 * Math.PI) {
+        angle = 0;
+        step += 10; // grow search radius if still overlapping
+      }
+    }
+    
+    dispersed.push({
+      ...marker,
+      x: currentX,
+      y: currentY
+    });
+  }
+
+  return dispersed;
 }
 
 // Badge sub-component helper
