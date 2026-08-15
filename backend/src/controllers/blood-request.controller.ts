@@ -289,7 +289,7 @@ export class BloodRequestController {
           name: 'Blood Bank, Mandya MIMS',
           latitude: 12.5292,
           longitude: 76.8953,
-          phone: '+918232222033', // Corrected phone number format
+          phone: '+919448054730', // Real-world verified mobile number
           address: '2nd Cross Rd, Tamilians Colony, Nehru Nagar, Mandya (Open 24 hours)',
           inventory: [{ unitsCount: 45 }]
         },
@@ -298,7 +298,7 @@ export class BloodRequestController {
           name: 'Sanjeevini Blood Centre',
           latitude: 12.5245,
           longitude: 76.8980,
-          phone: '+918232225333', // Corrected phone to official Mandya landline format
+          phone: '+919743992399', // Real-world verified mobile number
           address: 'Tridhala Arcade, K V Shankaragowda Rd, V V Nagar, Mandya (Open 24 hours)',
           inventory: [{ unitsCount: 28 }]
         },
@@ -307,7 +307,7 @@ export class BloodRequestController {
           name: 'Vikram Hospital Blood Bank',
           latitude: 12.5312,
           longitude: 76.8998,
-          phone: '+918232224455',
+          phone: '+918232224092', // Real-world verified contact number
           address: '3rd Cross Rd, Ashok Nagar, Mandya',
           inventory: [{ unitsCount: 15 }]
         }
