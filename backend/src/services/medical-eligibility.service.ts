@@ -43,10 +43,13 @@ export class MedicalEligibilityService {
       let nextEligibleDate: Date | null = null;
       const reasons: string[] = [];
 
-      // A. Weight restriction (Min 50kg)
+      // A. Weight restriction (Min 50kg, Max 150kg)
       if (answers.weight < 50) {
         isEligible = false;
         reasons.push('Weight is below the minimum threshold of 50 kg.');
+      } else if (answers.weight > 150) {
+        isEligible = false;
+        reasons.push('Weight exceeds the maximum threshold of 150 kg.');
       }
 
       // B. Active infections

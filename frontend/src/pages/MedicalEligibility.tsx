@@ -108,7 +108,11 @@ export const MedicalEligibility: React.FC = () => {
             <Input
               label="Weight (in Kg)"
               type="number"
-              {...register('weight', { required: 'Weight is required', min: { value: 30, message: 'Must be at least 30kg' } })}
+              {...register('weight', {
+                required: 'Weight is required',
+                min: { value: 50, message: 'Weight must be at least 50 kg' },
+                max: { value: 150, message: 'Weight must not exceed 150 kg' }
+              })}
               error={errors.weight?.message}
             />
           </div>
