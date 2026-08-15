@@ -24,7 +24,23 @@ export const useCamps = () => {
     queryFn: async () => {
       try {
         const res = await apiClient.get('/camps').catch(() => null);
-        return (res?.data?.data?.items || res?.data?.data || [
+        const rawItems = res?.data?.data?.items || res?.data?.data;
+        if (rawItems && Array.isArray(rawItems)) {
+          return rawItems.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            location: item.location || item.address || 'Unknown Address',
+            startDate: item.startDate,
+            endDate: item.endDate,
+            bloodBankId: item.bloodBankId || '',
+            bloodBankName: item.bloodBankName || item.organizer || 'Red Cross Society',
+            latitude: item.latitude,
+            longitude: item.longitude,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          })) as DonationCampItem[];
+        }
+        return [
           {
             id: 'camp-1',
             name: 'Noida City Center Megadrive',
@@ -51,7 +67,7 @@ export const useCamps = () => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
-        ]) as DonationCampItem[];
+        ] as DonationCampItem[];
       } catch {
         return [] as DonationCampItem[];
       }
@@ -60,7 +76,17 @@ export const useCamps = () => {
 
   const createCampMutation = useMutation({
     mutationFn: async (data: { name: string; location: string; startDate: string; endDate: string; bloodBankId: string; latitude: number; longitude: number }) => {
-      const res = await apiClient.post('/camps', data);
+      const payload = {
+        name: data.name,
+        organizer: 'Red Cross Society & LifeLink',
+        address: data.location,
+        city: data.location.toLowerCase().includes('bengaluru') || data.location.toLowerCase().includes('bangalore') ? 'Bengaluru' : 'Noida',
+        latitude: data.latitude,
+        longitude: data.longitude,
+        startDate: data.startDate,
+        endDate: data.endDate,
+      };
+      const res = await apiClient.post('/camps', payload);
       return res.data;
     },
     onSuccess: () => {
