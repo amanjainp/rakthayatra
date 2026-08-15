@@ -348,7 +348,7 @@ export class BloodRequestController {
           name: 'Manipal Hospital Blood Bank (Mysuru)',
           latitude: 12.3382,
           longitude: 76.6438,
-          phone: '+918212555555', // Real-world verified contact number
+          phone: '+918212555000', // Corrected to official landline phone number
           address: 'No. 85-86, Bangalore-Mysore Ring Road Junction, Bannimantapa A Layout, Mysuru (Open 24 hours)',
           inventory: [{ unitsCount: 30 }]
         }
