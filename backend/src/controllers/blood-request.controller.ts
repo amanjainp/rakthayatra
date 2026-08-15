@@ -289,13 +289,13 @@ export class BloodRequestController {
           inventory: [{ unitsCount: 28 }]
         },
         {
-          id: 'mdc-voluntary',
-          name: 'MDC Voluntary Blood Bank',
-          latitude: 12.5273,
-          longitude: 76.8996,
-          phone: '+918232231665', // Real-world verified contact number
-          address: 'Khatha No. D5/1045/187, Alahalli Extension, General Hospital Road, Nehrunagar, Mandya',
-          inventory: [{ unitsCount: 32 }]
+          id: 'adichunchanagiri-hospital',
+          name: 'Adichunchanagiri Hospital Blood Bank',
+          latitude: 12.9814,
+          longitude: 76.7275,
+          phone: '+919448084990', // Real-world verified mobile number
+          address: 'Balagangadharnath Nagar, Bellur, Mandya (Open 24 hours)',
+          inventory: [{ unitsCount: 55 }]
         }
       ];
 
