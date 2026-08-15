@@ -289,13 +289,13 @@ export class BloodRequestController {
           inventory: [{ unitsCount: 28 }]
         },
         {
-          id: 'vikram-hospital',
-          name: 'Vikram Hospital Blood Bank',
-          latitude: 12.5312,
-          longitude: 76.8998,
-          phone: '+918232224092', // Real-world verified contact number
-          address: '3rd Cross Rd, Ashok Nagar, Mandya',
-          inventory: [{ unitsCount: 15 }]
+          id: 'mdc-voluntary',
+          name: 'MDC Voluntary Blood Bank',
+          latitude: 12.5273,
+          longitude: 76.8996,
+          phone: '+918232231665', // Real-world verified contact number
+          address: 'Khatha No. D5/1045/187, Alahalli Extension, General Hospital Road, Nehrunagar, Mandya',
+          inventory: [{ unitsCount: 32 }]
         }
       ];
 
