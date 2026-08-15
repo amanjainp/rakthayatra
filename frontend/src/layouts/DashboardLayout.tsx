@@ -42,7 +42,6 @@ export const DashboardLayout: React.FC = () => {
     const commonLinks = [
       { name: 'Dashboard', path: ROLE_DASHBOARDS[user?.role || 'DONOR'], icon: HomeIcon },
       { name: 'Emergency Map', path: '/emergency-map', icon: MapIcon },
-      { name: 'Profile', path: '/profile', icon: UserIcon },
     ];
 
     const roleLinks: Record<string, { name: string; path: string; icon: any }[]> = {
@@ -139,7 +138,27 @@ export const DashboardLayout: React.FC = () => {
         </nav>
 
         {/* Sidebar Footer Logged-in profile */}
-        <div className="p-4 border-t border-slate-800/60">
+        <div className="p-4 border-t border-slate-800/60 space-y-1.5">
+          <Link
+            to="/profile"
+            onClick={() => setIsSidebarOpen(false)}
+            className={`flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group
+              ${
+                isActive('/profile')
+                  ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }
+            `}
+            title={isCollapsed ? 'Profile' : ''}
+          >
+            <UserIcon
+              className={`h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-105
+                ${isActive('/profile') ? 'text-rose-500' : 'text-slate-400 group-hover:text-slate-200'}
+              `}
+            />
+            {!isCollapsed && <span>Profile</span>}
+          </Link>
+
           <button
             onClick={handleLogout}
             className={`w-full flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all duration-200 group`}
