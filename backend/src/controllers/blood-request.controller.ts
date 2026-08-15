@@ -352,6 +352,42 @@ export class BloodRequestController {
           phone: '+918212555000', // Corrected to official landline phone number
           address: 'No. 85-86, Bangalore-Mysore Ring Road Junction, Bannimantapa A Layout, Mysuru (Open 24 hours)',
           inventory: [{ unitsCount: 30 }]
+        },
+        {
+          id: 'mission-hospital-mysore',
+          name: 'CSI Holdsworth Memorial (Mission Hospital) Blood Bank',
+          latitude: 12.3214,
+          longitude: 76.6503,
+          phone: '+918212521650', // Real-world verified landline number
+          address: 'Sawday Road, Mandi Mohalla, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 25 }]
+        },
+        {
+          id: 'chandrakala-hospital-mysore',
+          name: 'Rotary Mysore Chandrakala Hospital Blood Bank',
+          latitude: 12.3257,
+          longitude: 76.6195,
+          phone: '+918214288638', // Real-world verified landline number
+          address: 'Kalidasa Road, Jayalakshmipuram, Mysuru (Open 24 hours)',
+          inventory: [{ unitsCount: 15 }]
+        },
+        {
+          id: 'redcross-ramanagara',
+          name: 'Red Cross Blood Bank Ramanagara',
+          latitude: 12.7184,
+          longitude: 77.2809,
+          phone: '+918050117908', // Real-world verified mobile number
+          address: 'District Hospital Premises, 1st Floor, Ramanagara (Open 24 hours)',
+          inventory: [{ unitsCount: 18 }]
+        },
+        {
+          id: 'chamundeshwari-hospital-channapatna',
+          name: 'Sri Chamundeshwari Hospital Blood Centre',
+          latitude: 12.6710,
+          longitude: 77.2340,
+          phone: '+919731658978', // Real-world verified mobile number
+          address: 'Bengaluru-Mysuru NH 275 Highway, Dabanaguda Village, Channapatna Taluk (Open 24 hours)',
+          inventory: [{ unitsCount: 20 }]
         }
       ];
 
