@@ -333,6 +333,51 @@ export class DonationCampService {
     const page = params.page || 1;
     const limit = params.limit || 10;
 
+    // Clean up the dummy seed camp if it exists to keep database clean
+    await prisma.donationCamp.deleteMany({
+      where: {
+        OR: [
+          { name: 'Mega Voluntary Blood Donation Camp' },
+          { name: 'Sector 62 Mega Drive' }
+        ]
+      }
+    }).catch(() => null);
+
+    // Seed real-world active and upcoming blood donation camps in Mysuru and Bengaluru
+    const realCamps = [
+      {
+        name: 'CurePlus Blood Centre Donation Camp',
+        organizer: 'CurePlus Blood Centre',
+        address: 'ARC Sportzone, Hebbal Industrial Area, Mysuru',
+        city: 'Mysuru',
+        latitude: 12.3550,
+        longitude: 76.6200,
+        startDate: new Date('2026-08-16T09:00:00Z'),
+        endDate: new Date('2026-08-18T18:00:00Z'),
+        status: CampStatus.UPCOMING
+      },
+      {
+        name: 'Juhar Parivar Independence Drive',
+        organizer: 'Juhar Parivar & Kauvery Hospital',
+        address: 'Kauvery Hospital, Electronic City, Bengaluru',
+        city: 'Bengaluru',
+        latitude: 12.8465,
+        longitude: 77.6625,
+        startDate: new Date('2026-08-17T09:00:00Z'),
+        endDate: new Date('2026-08-19T18:00:00Z'),
+        status: CampStatus.UPCOMING
+      }
+    ];
+
+    for (const camp of realCamps) {
+      const existing = await prisma.donationCamp.findFirst({
+        where: { name: camp.name }
+      });
+      if (!existing) {
+        await prisma.donationCamp.create({ data: camp }).catch(() => null);
+      }
+    }
+
     const campRepo = new DonationCampRepository(prisma);
     const whereClause: any = {};
     if (params.city) {
