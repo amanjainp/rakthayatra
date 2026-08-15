@@ -388,42 +388,6 @@ export class BloodRequestController {
           phone: '+919731658978', // Real-world verified mobile number
           address: 'Bengaluru-Mysuru NH 275 Highway, Dabanaguda Village, Channapatna Taluk (Open 24 hours)',
           inventory: [{ unitsCount: 20 }]
-        },
-        {
-          id: 'district-hospital-tumkur',
-          name: 'District Hospital Blood Bank Tumkur',
-          latitude: 13.3364,
-          longitude: 77.1023,
-          phone: '+919164197557', // Real-world verified mobile number
-          address: 'Near Town Hall, B.H. Road, Tumkur (Open 24 hours)',
-          inventory: [{ unitsCount: 40 }]
-        },
-        {
-          id: 'siddaganga-hospital-tumkur',
-          name: 'Siddaganga SMCRI Hospital Blood Bank (Tumkur)',
-          latitude: 13.3130,
-          longitude: 77.1265,
-          phone: '+918162602222', // Real-world verified contact number
-          address: 'Dr. Sree Shivakumaraswamiji Road, Bengaluru-Honnavar Road, Tumakuru (Open 24 hours)',
-          inventory: [{ unitsCount: 50 }]
-        },
-        {
-          id: 'holycross-hospital-kamagere',
-          name: 'Holy Cross Hospital Blood Bank (Kamagere)',
-          latitude: 12.0300,
-          longitude: 77.2080,
-          phone: '+919535813053', // Real-world verified mobile number
-          address: 'Kamagere-Bandalli Road, Kamagere, Kollegal Taluk, Chamarajanagar (Open 24 hours)',
-          inventory: [{ unitsCount: 15 }]
-        },
-        {
-          id: 'basavarajendra-blood-center',
-          name: 'Basavarajendra Blood Center (Chamarajanagar)',
-          latitude: 12.0025,
-          longitude: 76.9290,
-          phone: '+919901485390', // Real-world verified mobile number
-          address: 'No. 728, Nanjangud Main Road, Mariyala, Chamarajanagar (Open 24 hours)',
-          inventory: [{ unitsCount: 22 }]
         }
       ];
 
