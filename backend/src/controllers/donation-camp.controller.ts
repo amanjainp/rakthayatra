@@ -23,6 +23,7 @@ const createCampSchema = z.object({
     message: 'End date must be a valid date string.',
   }),
   status: z.enum(['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
+  externalRegistrationUrl: z.string().url().or(z.string().length(0)).nullable().optional(),
 });
 
 const updateCampSchema = z.object({
@@ -35,6 +36,7 @@ const updateCampSchema = z.object({
   startDate: z.string().refine((val) => !isNaN(Date.parse(val))).optional(),
   endDate: z.string().refine((val) => !isNaN(Date.parse(val))).optional(),
   status: z.enum(['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
+  externalRegistrationUrl: z.string().url().or(z.string().length(0)).nullable().optional(),
 });
 
 const volunteerSchema = z.object({

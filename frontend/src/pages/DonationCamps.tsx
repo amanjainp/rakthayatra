@@ -124,24 +124,41 @@ export const DonationCamps: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800/60">
-              {isDonor && (
-                <>
-                  <Button variant="primary" size="sm" onClick={() => handleAttend(camp.id)} className="flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" /> Attend Camp
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/60">
+              <div className="flex flex-wrap gap-2">
+                {isDonor && (
+                  <>
+                    <Button variant="primary" size="sm" onClick={() => handleAttend(camp.id)} className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> Attend Camp
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setVolunteerTargetId(camp.id)} className="flex items-center gap-1">
+                      <UserPlus className="w-3.5 h-3.5" /> Volunteer
+                    </Button>
+                    {camp.externalRegistrationUrl && (
+                      <a
+                        href={camp.externalRegistrationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-xl text-xs font-semibold h-9 px-3 bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all gap-1.5"
+                      >
+                        Register on Official Website
+                      </a>
+                    )}
+                  </>
+                )}
+                {isHospital && (
+                  <Button variant="outline" size="sm" onClick={() => handleHospitalAssociate(camp.id)} className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" /> Associate Facility
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setVolunteerTargetId(camp.id)} className="flex items-center gap-1">
-                    <UserPlus className="w-3.5 h-3.5" /> Volunteer
-                  </Button>
-                </>
-              )}
-              {isHospital && (
-                <Button variant="outline" size="sm" onClick={() => handleHospitalAssociate(camp.id)} className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" /> Associate Facility
-                </Button>
-              )}
-              {!user && (
-                <p className="text-xs text-slate-500 italic">Sign in to interact with camps</p>
+                )}
+                {!user && (
+                  <p className="text-xs text-slate-500 italic">Sign in to interact with camps</p>
+                )}
+              </div>
+              {camp.externalRegistrationUrl && (
+                <p className="text-[10px] text-slate-500 italic mt-1 leading-normal">
+                  * Note: Registration will be completed on the official external website of {camp.bloodBankName || 'the organizer'}, not through Rakthayatra/LifeLink.
+                </p>
               )}
             </div>
           </div>

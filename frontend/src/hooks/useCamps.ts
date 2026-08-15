@@ -12,6 +12,7 @@ export interface DonationCampItem {
   bloodBankName?: string;
   latitude: number;
   longitude: number;
+  externalRegistrationUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +37,7 @@ export const useCamps = () => {
             bloodBankName: item.bloodBankName || item.organizer || 'Red Cross Society',
             latitude: item.latitude,
             longitude: item.longitude,
+            externalRegistrationUrl: item.externalRegistrationUrl || null,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
           })) as DonationCampItem[];
@@ -51,6 +53,7 @@ export const useCamps = () => {
             bloodBankName: 'CurePlus Blood Centre',
             latitude: 12.3550,
             longitude: 76.6200,
+            externalRegistrationUrl: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
@@ -64,6 +67,7 @@ export const useCamps = () => {
             bloodBankName: 'Juhar Parivar & Kauvery Hospital',
             latitude: 12.8465,
             longitude: 77.6625,
+            externalRegistrationUrl: 'https://www.kauveryhospital.com/',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },

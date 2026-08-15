@@ -31,6 +31,7 @@ export class DonationCampService {
       startDate: Date;
       endDate: Date;
       status?: CampStatus;
+      externalRegistrationUrl?: string | null;
     },
     userId?: string
   ): Promise<DonationCamp> {
@@ -52,6 +53,7 @@ export class DonationCampService {
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
         status: data.status || 'UPCOMING',
+        externalRegistrationUrl: data.externalRegistrationUrl || null,
       });
 
       // Audit Log
@@ -86,6 +88,7 @@ export class DonationCampService {
       startDate?: Date;
       endDate?: Date;
       status?: CampStatus;
+      externalRegistrationUrl?: string | null;
     },
     userId?: string
   ): Promise<DonationCamp> {
@@ -334,14 +337,18 @@ export class DonationCampService {
     const limit = params.limit || 10;
 
     // Clean up the dummy seed camp if it exists to keep database clean
-    await prisma.donationCamp.deleteMany({
-      where: {
-        OR: [
-          { name: 'Mega Voluntary Blood Donation Camp' },
-          { name: 'Sector 62 Mega Drive' }
-        ]
-      }
-    }).catch(() => null);
+    if (prisma.donationCamp && typeof prisma.donationCamp.deleteMany === 'function') {
+      await prisma.donationCamp.deleteMany({
+        where: {
+          OR: [
+            { name: 'Mega Voluntary Blood Donation Camp' },
+            { name: 'Sector 62 Mega Drive' },
+            { name: 'CurePlus Blood Centre Donation Camp' },
+            { name: 'Juhar Parivar Independence Drive' }
+          ]
+        }
+      }).catch(() => null);
+    }
 
     // Seed real-world active and upcoming blood donation camps in Mysuru and Bengaluru
     const realCamps = [
@@ -354,7 +361,8 @@ export class DonationCampService {
         longitude: 76.6200,
         startDate: new Date('2026-08-16T09:00:00Z'),
         endDate: new Date('2026-08-18T18:00:00Z'),
-        status: CampStatus.UPCOMING
+        status: 'UPCOMING' as any,
+        externalRegistrationUrl: null
       },
       {
         name: 'Juhar Parivar Independence Drive',
@@ -365,16 +373,19 @@ export class DonationCampService {
         longitude: 77.6625,
         startDate: new Date('2026-08-17T09:00:00Z'),
         endDate: new Date('2026-08-19T18:00:00Z'),
-        status: CampStatus.UPCOMING
+        status: 'UPCOMING' as any,
+        externalRegistrationUrl: 'https://www.kauveryhospital.com/'
       }
     ];
 
     for (const camp of realCamps) {
-      const existing = await prisma.donationCamp.findFirst({
-        where: { name: camp.name }
-      });
-      if (!existing) {
-        await prisma.donationCamp.create({ data: camp }).catch(() => null);
+      if (prisma.donationCamp && typeof prisma.donationCamp.findFirst === 'function' && typeof prisma.donationCamp.create === 'function') {
+        const existing = await prisma.donationCamp.findFirst({
+          where: { name: camp.name }
+        });
+        if (!existing) {
+          await prisma.donationCamp.create({ data: camp }).catch(() => null);
+        }
       }
     }
 

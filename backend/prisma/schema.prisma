@@ -257,6 +257,7 @@ model DonationCamp {
   startDate DateTime
   endDate   DateTime
   status    CampStatus     @default(UPCOMING)
+  externalRegistrationUrl String?
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
   deletedAt DateTime?
