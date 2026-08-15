@@ -336,20 +336,6 @@ export class DonationCampService {
     const page = params.page || 1;
     const limit = params.limit || 10;
 
-    // Clean up the dummy seed camp if it exists to keep database clean
-    if (prisma.donationCamp && typeof prisma.donationCamp.deleteMany === 'function') {
-      await prisma.donationCamp.deleteMany({
-        where: {
-          OR: [
-            { name: 'Mega Voluntary Blood Donation Camp' },
-            { name: 'Sector 62 Mega Drive' },
-            { name: 'CurePlus Blood Centre Donation Camp' },
-            { name: 'Juhar Parivar Independence Drive' }
-          ]
-        }
-      }).catch(() => null);
-    }
-
     // Seed real-world active and upcoming blood donation camps in Mysuru and Bengaluru
     const realCamps = [
       {
@@ -379,12 +365,21 @@ export class DonationCampService {
     ];
 
     for (const camp of realCamps) {
-      if (prisma.donationCamp && typeof prisma.donationCamp.findFirst === 'function' && typeof prisma.donationCamp.create === 'function') {
+      if (prisma.donationCamp && typeof prisma.donationCamp.findFirst === 'function') {
         const existing = await prisma.donationCamp.findFirst({
           where: { name: camp.name }
         });
         if (!existing) {
-          await prisma.donationCamp.create({ data: camp }).catch(() => null);
+          if (typeof prisma.donationCamp.create === 'function') {
+            await prisma.donationCamp.create({ data: camp }).catch(() => null);
+          }
+        } else if (existing.externalRegistrationUrl !== camp.externalRegistrationUrl) {
+          if (typeof prisma.donationCamp.update === 'function') {
+            await prisma.donationCamp.update({
+              where: { id: existing.id },
+              data: { externalRegistrationUrl: camp.externalRegistrationUrl }
+            }).catch(() => null);
+          }
         }
       }
     }
