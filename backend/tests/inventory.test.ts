@@ -8,6 +8,8 @@ const mockFindMany = jest.fn();
 const mockCount = jest.fn();
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
+const mockUpdateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
+const mockCreateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
 
 jest.mock('@prisma/client', () => {
   const actualPrisma = jest.requireActual('@prisma/client');
@@ -27,9 +29,11 @@ jest.mock('@prisma/client', () => {
       count: (...args: any) => mockCount(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: (...args: any) => mockUpdateMany(...args),
     },
     auditLog: {
       create: (...args: any) => mockCreate(...args),
+      createMany: (...args: any) => mockCreateMany(...args),
     },
   };
 

@@ -10,6 +10,8 @@ const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockUpsert = jest.fn();
 const mockDelete = jest.fn();
+const mockUpdateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
+const mockCreateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
 
 jest.mock('@prisma/client', () => {
   const actualPrisma = jest.requireActual('@prisma/client');
@@ -21,6 +23,10 @@ jest.mock('@prisma/client', () => {
     },
     role: {
       findFirst: (...args: any) => mockFindFirst(...args),
+    },
+    bloodBankProfile: {
+      findFirst: (...args: any) => mockFindFirst(...args),
+      findMany: (...args: any) => mockFindMany(...args),
     },
     donorProfile: {
       findUnique: (...args: any) => mockFindUnique(...args),
@@ -37,11 +43,13 @@ jest.mock('@prisma/client', () => {
       findFirst: (...args: any) => mockFindFirst(...args),
       findMany: (...args: any) => mockFindMany(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: (...args: any) => mockUpdateMany(...args),
     },
     bloodRequest: {
       findUnique: (...args: any) => mockFindUnique(...args),
       findFirst: (...args: any) => mockFindFirst(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: (...args: any) => mockUpdateMany(...args),
     },
     donation: {
       findUnique: (...args: any) => mockFindUnique(...args),
@@ -54,6 +62,10 @@ jest.mock('@prisma/client', () => {
     },
     auditLog: {
       create: (...args: any) => mockCreate(...args),
+      createMany: (...args: any) => mockCreateMany(...args),
+    },
+    userConsent: {
+      create: jest.fn(),
     },
   };
 
@@ -173,19 +185,20 @@ describe('LifeLink Production Readiness & Security Enforcement Tests', () => {
 
       // Mock finding nearby compatible blood banks and donors within bounding box
       mockFindMany.mockImplementation((params: any) => {
-        // Return 1 blood bank with available O_NEG units
-        if (params?.where?.status === 'AVAILABLE') {
+        // Return 1 blood bank with available O_NEG units when querying blood bank profile
+        if (params?.include?.inventory) {
           return Promise.resolve([
             {
-              id: 'bank-1',
-              bloodGroup: 'O_NEG',
-              unitsCount: 10,
-              bloodBank: {
-                id: 'bank-profile-1',
-                name: 'Metro Blood Bank',
-                latitude: 12.9716,
-                longitude: 77.5946,
-              },
+              id: 'bank-profile-1',
+              name: 'Metro Blood Bank',
+              latitude: 12.9716,
+              longitude: 77.5946,
+              inventory: [
+                {
+                  bloodGroup: 'O_NEG',
+                  unitsCount: 10,
+                },
+              ],
             },
           ]);
         }

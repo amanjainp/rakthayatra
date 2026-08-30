@@ -214,6 +214,50 @@ export class MedicalEligibilityService {
       };
     });
   }
+
+  /**
+   * Scan and re-encrypt all medical eligibility records to the latest version.
+   */
+  async reEncryptRecords(userId?: string): Promise<{ total: number; reEncrypted: number }> {
+    const { encryptData, decryptData, ACTIVE_VERSION } = require('../utils/encryption');
+    const records = await prisma.medicalEligibility.findMany();
+    let reEncryptedCount = 0;
+
+    for (const record of records) {
+      if (record.answers) {
+        let payload = record.answers as any;
+        if (typeof payload === 'string') {
+          try {
+            payload = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+        }
+
+        if (payload && payload._enc && payload.v < ACTIVE_VERSION) {
+          try {
+            const plaintext = decryptData(payload);
+            const newPayload = encryptData(plaintext);
+
+            await prisma.medicalEligibility.update({
+              where: { id: record.id },
+              data: { answers: newPayload as any },
+            });
+
+            reEncryptedCount++;
+          } catch (err: any) {
+            logger.error(`Failed to re-encrypt record ${record.id}: ${err.message}`);
+          }
+        }
+      }
+    }
+
+    if (reEncryptedCount > 0) {
+      logger.info(`[AUDIT] Action: RE_ENCRYPT_MEDICAL_RECORDS | Re-encrypted: ${reEncryptedCount} | TriggeredBy: ${userId || 'System'}`);
+    }
+
+    return { total: records.length, reEncrypted: reEncryptedCount };
+  }
 }
 
 export const medicalEligibilityService = new MedicalEligibilityService();

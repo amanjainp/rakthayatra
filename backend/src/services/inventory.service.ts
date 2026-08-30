@@ -84,76 +84,82 @@ export class InventoryService {
     userId?: string
   ): Promise<BloodInventory> {
     if (data.unitsToReserve <= 0) {
+      metricsService.recordReservationFailure();
       throw new BadRequestError('Reserve units count must be greater than zero.');
     }
 
-    const reserved = await prisma.$transaction(async (tx) => {
-      const inventoryRepo = new InventoryRepository(tx as any);
-      const auditLogRepo = new AuditLogRepository(tx as any);
+    try {
+      const reserved = await prisma.$transaction(async (tx) => {
+        const inventoryRepo = new InventoryRepository(tx as any);
+        const auditLogRepo = new AuditLogRepository(tx as any);
 
-      // Retrieve item
-      const inventory = await inventoryRepo.findById(data.inventoryId);
-      if (!inventory) {
-        throw new NotFoundError('Blood inventory item not found.');
-      }
+        // Retrieve item
+        const inventory = await inventoryRepo.findById(data.inventoryId);
+        if (!inventory) {
+          throw new NotFoundError('Blood inventory item not found.');
+        }
 
-      if (inventory.status !== 'AVAILABLE') {
-        throw new BadRequestError(`Cannot reserve inventory with status: ${inventory.status}`);
-      }
+        if (inventory.status !== 'AVAILABLE') {
+          throw new BadRequestError(`Cannot reserve inventory with status: ${inventory.status}`);
+        }
 
-      if (inventory.unitsCount < data.unitsToReserve) {
-        throw new BadRequestError('Insufficient blood units count in target batch.');
-      }
+        if (inventory.unitsCount < data.unitsToReserve) {
+          throw new BadRequestError('Insufficient blood units count in target batch.');
+        }
 
-      let reservedRecord: BloodInventory;
+        let reservedRecord: BloodInventory;
 
-      if (inventory.unitsCount === data.unitsToReserve) {
-        // Reserve the entire batch using optimistic lock check
-        reservedRecord = await inventoryRepo.updateWithOptimisticLock(
-          data.inventoryId,
-          { status: 'RESERVED' },
-          inventory.updatedAt
-        );
-      } else {
-        // Fractional reservation
-        const remainingCount = inventory.unitsCount - data.unitsToReserve;
+        if (inventory.unitsCount === data.unitsToReserve) {
+          // Reserve the entire batch using optimistic lock check
+          reservedRecord = await inventoryRepo.updateWithOptimisticLock(
+            data.inventoryId,
+            { status: 'RESERVED' },
+            inventory.updatedAt
+          );
+        } else {
+          // Fractional reservation
+          const remainingCount = inventory.unitsCount - data.unitsToReserve;
 
-        // Deduct from available using optimistic lock check
-        await inventoryRepo.updateWithOptimisticLock(
-          data.inventoryId,
-          { unitsCount: remainingCount },
-          inventory.updatedAt
-        );
+          // Deduct from available using optimistic lock check
+          await inventoryRepo.updateWithOptimisticLock(
+            data.inventoryId,
+            { unitsCount: remainingCount },
+            inventory.updatedAt
+          );
 
-        // Create new reserved record batch
-        reservedRecord = await inventoryRepo.create({
-          bloodBank: { connect: { id: inventory.bloodBankId } },
-          bloodGroup: inventory.bloodGroup,
-          unitsCount: data.unitsToReserve,
-          expiryDate: inventory.expiryDate,
-          status: 'RESERVED',
+          // Create new reserved record batch
+          reservedRecord = await inventoryRepo.create({
+            bloodBank: { connect: { id: inventory.bloodBankId } },
+            bloodGroup: inventory.bloodGroup,
+            unitsCount: data.unitsToReserve,
+            expiryDate: inventory.expiryDate,
+            status: 'RESERVED',
+          });
+        }
+
+        // Audit Log
+        await auditLogRepo.create({
+          user: userId ? { connect: { id: userId } } : undefined,
+          action: 'RESERVE_BLOOD_UNITS',
+          details: {
+            originalInventoryId: data.inventoryId,
+            reservedInventoryId: reservedRecord.id,
+            unitsReserved: data.unitsToReserve,
+            bloodBankId: inventory.bloodBankId,
+          },
         });
-      }
 
-      // Audit Log
-      await auditLogRepo.create({
-        user: userId ? { connect: { id: userId } } : undefined,
-        action: 'RESERVE_BLOOD_UNITS',
-        details: {
-          originalInventoryId: data.inventoryId,
-          reservedInventoryId: reservedRecord.id,
-          unitsReserved: data.unitsToReserve,
-          bloodBankId: inventory.bloodBankId,
-        },
+        metricsService.recordInventoryReservation();
+        return reservedRecord;
       });
 
-      metricsService.recordInventoryReservation();
-      return reservedRecord;
-    });
-
-    // Invalidate Redis stock cache
-    await this.invalidateCache(reserved.bloodBankId);
-    return reserved;
+      // Invalidate Redis stock cache
+      await this.invalidateCache(reserved.bloodBankId);
+      return reserved;
+    } catch (error) {
+      metricsService.recordReservationFailure();
+      throw error;
+    }
   }
 
   /**
@@ -203,9 +209,6 @@ export class InventoryService {
   async checkAndFlagExpiredUnits(userId?: string): Promise<BloodInventory[]> {
     const now = new Date();
     const expiredList = await prisma.$transaction(async (tx) => {
-      const inventoryRepo = new InventoryRepository(tx as any);
-      const auditLogRepo = new AuditLogRepository(tx as any);
-
       // Find expired items
       const expiredBatches = await tx.bloodInventory.findMany({
         where: {
@@ -214,16 +217,15 @@ export class InventoryService {
         },
       });
 
-      const updatedList: BloodInventory[] = [];
-      for (const batch of expiredBatches) {
-        const updated = await inventoryRepo.update(batch.id, {
-          status: 'EXPIRED',
+      if (expiredBatches.length > 0) {
+        const batchIds = expiredBatches.map((b) => b.id);
+        await tx.bloodInventory.updateMany({
+          where: { id: { in: batchIds } },
+          data: { status: 'EXPIRED' },
         });
-        updatedList.push(updated);
 
-        // Log audit
-        await auditLogRepo.create({
-          user: userId ? { connect: { id: userId } } : undefined,
+        const auditLogsData = expiredBatches.map((batch) => ({
+          userId: userId || null,
           action: 'EXPIRE_BLOOD_UNIT',
           details: {
             inventoryId: batch.id,
@@ -231,10 +233,19 @@ export class InventoryService {
             bloodGroup: batch.bloodGroup,
             unitsExpired: batch.unitsCount,
           },
+        }));
+
+        await tx.auditLog.createMany({
+          data: auditLogsData,
         });
+
+        // Update in-memory status for return value
+        for (const batch of expiredBatches) {
+          batch.status = 'EXPIRED';
+        }
       }
 
-      return updatedList;
+      return expiredBatches;
     });
 
     // Invalidate caches for modified blood banks
@@ -256,9 +267,6 @@ export class InventoryService {
   async sweepExpiredReservations(userId?: string): Promise<BloodInventory[]> {
     const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
     const releasedList = await prisma.$transaction(async (tx) => {
-      const inventoryRepo = new InventoryRepository(tx as any);
-      const auditLogRepo = new AuditLogRepository(tx as any);
-
       // Find reserved units that haven't been updated for 24h
       const expiredReservations = await tx.bloodInventory.findMany({
         where: {
@@ -267,26 +275,34 @@ export class InventoryService {
         },
       });
 
-      const updatedList: BloodInventory[] = [];
-      for (const batch of expiredReservations) {
-        const updated = await inventoryRepo.update(batch.id, {
-          status: 'AVAILABLE',
+      if (expiredReservations.length > 0) {
+        const batchIds = expiredReservations.map((b) => b.id);
+        await tx.bloodInventory.updateMany({
+          where: { id: { in: batchIds } },
+          data: { status: 'AVAILABLE' },
         });
-        updatedList.push(updated);
 
-        // Audit Log
-        await auditLogRepo.create({
-          user: userId ? { connect: { id: userId } } : undefined,
+        const auditLogsData = expiredReservations.map((batch) => ({
+          userId: userId || null,
           action: 'RELEASE_EXPIRED_RESERVATION',
           details: {
             inventoryId: batch.id,
             unitsReleased: batch.unitsCount,
             bloodBankId: batch.bloodBankId,
           },
+        }));
+
+        await tx.auditLog.createMany({
+          data: auditLogsData,
         });
+
+        // Update in-memory status for return value
+        for (const batch of expiredReservations) {
+          batch.status = 'AVAILABLE';
+        }
       }
 
-      return updatedList;
+      return expiredReservations;
     });
 
     // Invalidate caches

@@ -15,4 +15,9 @@ router.get('/donor/:id', authenticate, (req, res) => medicalEligibilityControlle
 // 3. Retrieve historical questionnaire updates (Authenticated users)
 router.get('/donor/:id/history', authenticate, (req, res) => medicalEligibilityController.getHistory(req, res));
 
+// 4. Trigger re-encryption of old keys (Admins only)
+router.post('/re-encrypt', authenticate, requireRoles(['ADMIN']), (req, res) =>
+  medicalEligibilityController.reEncrypt(req, res)
+);
+
 export default router;

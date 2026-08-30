@@ -287,6 +287,7 @@ export class AuthService {
       }
       
       if (attempts >= 5) {
+        metricsService.recordOTPLockout();
         throw new Error('Too many invalid OTP attempts. Please request a new OTP.');
       }
 

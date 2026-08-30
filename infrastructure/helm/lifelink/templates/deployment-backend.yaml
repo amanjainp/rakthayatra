@@ -28,13 +28,60 @@ spec:
               name: http
           env:
             - name: DATABASE_URL
-              value: "{{ .Values.backend.secrets.dbUrl }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: database-url
             - name: REDIS_URL
-              value: "{{ .Values.backend.secrets.redisUrl }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: redis-url
             - name: RABBITMQ_URL
-              value: "{{ .Values.backend.secrets.rabbitmqUrl }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: rabbitmq-url
             - name: JWT_SECRET
-              value: "{{ .Values.backend.secrets.jwtSecret }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: jwt-secret
+            - name: ENCRYPTION_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: encryption-keys
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: aws-secret-access-key
+            - name: GOOGLE_MAPS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: google-maps-api-key
+            - name: FIREBASE_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: firebase-project-id
+            - name: FIREBASE_CLIENT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: firebase-client-email
+            - name: FIREBASE_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secrets
+                  key: firebase-private-key
             - name: PORT
               value: "{{ .Values.backend.service.port }}"
             - name: NODE_ENV
@@ -43,13 +90,13 @@ spec:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/live
               port: http
             initialDelaySeconds: 30
             periodSeconds: 15
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: http
             initialDelaySeconds: 15
             periodSeconds: 10

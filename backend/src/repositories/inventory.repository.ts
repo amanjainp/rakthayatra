@@ -1,6 +1,7 @@
 import { PrismaClient, BloodInventory, Prisma, BloodGroup } from '@prisma/client';
 import { BaseRepository, IBaseRepository } from './base.repository';
 import { ConflictError } from '../errors/app-error';
+import { metricsService } from '../services/metrics.service';
 
 export interface IInventoryRepository
   extends IBaseRepository<BloodInventory, Prisma.BloodInventoryCreateInput, Prisma.BloodInventoryUpdateInput> {
@@ -55,6 +56,7 @@ export class InventoryRepository
     } catch (error: any) {
       // Prisma error code for constraint/where clause failure: P2025
       if (error.code === 'P2025') {
+        metricsService.recordInventoryConflict();
         throw new ConflictError('Concurrent update detected on blood inventory. Please retry the operation.');
       }
       throw error;

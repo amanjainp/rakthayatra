@@ -12,6 +12,7 @@ const envSchema = z.object({
     .default(5000),
   NODE_ENV: z.enum(['development', 'production', 'test', 'staging']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required.'),
+  DATABASE_URL_REPLICA: z.string().optional(),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters long.'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
   ALLOWED_ORIGINS: z.string().default('*'),

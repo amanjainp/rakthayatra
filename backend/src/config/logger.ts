@@ -55,6 +55,13 @@ const logFormat = winston.format.combine(
   winston.format.json()
 );
 
+const isProduction = env.NODE_ENV === 'production' || env.NODE_ENV === 'staging';
+
+// Filter format to intercept only [AUDIT] messages
+const auditLogFilter = winston.format((info) => {
+  return typeof info.message === 'string' && info.message.includes('[AUDIT]') ? info : false;
+});
+
 const logger = winston.createLogger({
   level: env.LOG_LEVEL,
   format: logFormat,
@@ -67,24 +74,28 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: path.join(__dirname, '../../logs/combined.log'),
     }),
+    new winston.transports.File({
+      filename: path.join(__dirname, '../../logs/audit.log'),
+      format: winston.format.combine(
+        auditLogFilter(),
+        winston.format.json()
+      ),
+    }),
+    new winston.transports.Console({
+      format: isProduction
+        ? winston.format.json()
+        : winston.format.combine(
+            winston.format.colorize(),
+            winston.format.printf((info) => {
+              const { timestamp, level, message, stack, requestId, correlationId } = info;
+              const reqId = typeof requestId === 'string' ? requestId : '';
+              const corrId = typeof correlationId === 'string' ? correlationId : '';
+              const reqContext = reqId ? ` [ReqID: ${reqId.substring(0, 8)} | CorrID: ${corrId.substring(0, 8)}]` : '';
+              return `[${timestamp}] ${level}${reqContext}: ${message}${stack ? `\n${stack}` : ''}`;
+            })
+          ),
+    }),
   ],
 });
-
-if (env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf((info) => {
-          const { timestamp, level, message, stack, requestId, correlationId } = info;
-          const reqId = typeof requestId === 'string' ? requestId : '';
-          const corrId = typeof correlationId === 'string' ? correlationId : '';
-          const reqContext = reqId ? ` [ReqID: ${reqId.substring(0, 8)} | CorrID: ${corrId.substring(0, 8)}]` : '';
-          return `[${timestamp}] ${level}${reqContext}: ${message}${stack ? `\n${stack}` : ''}`;
-        })
-      ),
-    })
-  );
-}
 
 export default logger;

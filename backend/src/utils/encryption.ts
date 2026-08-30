@@ -1,21 +1,41 @@
 import crypto from 'crypto';
 import { env } from '../config/env';
-import logger from '../config/logger';
 
-// Parse ENCRYPTION_KEYS (comma-separated list of keys). First key is the active key.
+// Parse ENCRYPTION_KEYS (supports explicit versioning e.g. "1:key1,2:key2" or simple "key1,key2")
 const rawKeys = env.ENCRYPTION_KEYS.split(',');
-const keys = rawKeys.map((keyStr) => {
-  // Ensure each key is converted to a 32-byte Buffer securely
-  const normalized = keyStr.trim();
-  if (normalized.length < 32) {
-    // Pad for local dev safety, but staging/prod will have 32+ characters verified by boot
-    return Buffer.from(normalized.padEnd(32, 'f').slice(0, 32), 'utf8');
-  }
-  return Buffer.from(normalized.slice(0, 32), 'utf8');
-});
+const keysMap: Record<number, Buffer> = {};
+let maxVersion = 1;
 
-const ACTIVE_VERSION = 1;
-const ACTIVE_KEY = keys[0];
+for (const raw of rawKeys) {
+  const parts = raw.split(':');
+  if (parts.length === 2) {
+    const version = parseInt(parts[0].trim(), 10);
+    const keyStr = parts[1].trim();
+    if (!isNaN(version)) {
+      const normalized = keyStr.length < 32 
+        ? keyStr.padEnd(32, 'f').slice(0, 32)
+        : keyStr.slice(0, 32);
+      keysMap[version] = Buffer.from(normalized, 'utf8');
+      if (version > maxVersion) {
+        maxVersion = version;
+      }
+    }
+  } else {
+    // Backward compatibility fallback for index-based comma-separated key lists
+    const index = rawKeys.indexOf(raw);
+    const keyStr = raw.trim();
+    const normalized = keyStr.length < 32 
+      ? keyStr.padEnd(32, 'f').slice(0, 32)
+      : keyStr.slice(0, 32);
+    keysMap[index + 1] = Buffer.from(normalized, 'utf8');
+    if (index + 1 > maxVersion) {
+      maxVersion = index + 1;
+    }
+  }
+}
+
+const ACTIVE_VERSION = maxVersion;
+const ACTIVE_KEY = keysMap[ACTIVE_VERSION] || Buffer.alloc(32, 'f');
 
 export interface EncryptedPayload {
   _enc: true;
@@ -57,8 +77,7 @@ export function decryptData(payload: any): string {
   }
 
   const encrypted = payload as EncryptedPayload;
-  const versionIndex = encrypted.v - 1;
-  const key = keys[versionIndex] || ACTIVE_KEY; // Fallback to active key if version out of range
+  const key = keysMap[encrypted.v] || ACTIVE_KEY; // Fallback to active key if version out of range
 
   const ivBuffer = Buffer.from(encrypted.iv, 'hex');
   const tagBuffer = Buffer.from(encrypted.tag, 'hex');

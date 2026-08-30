@@ -1,5 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import { metricsService } from '../services/metrics.service';
+import { env } from '../config/env';
+
+// Instantiate single replica client if DATABASE_URL_REPLICA is defined
+let prismaReplicaInstance: PrismaClient | undefined;
+if (env.DATABASE_URL_REPLICA) {
+  prismaReplicaInstance = new PrismaClient({
+    datasources: {
+      db: {
+        url: env.DATABASE_URL_REPLICA,
+      },
+    },
+  });
+}
 
 export interface IBaseRepository<T, CreateInput, UpdateInput> {
   findById(id: string, tx?: any): Promise<T | null>;
@@ -22,6 +35,7 @@ export abstract class BaseRepository<T, CreateInput, UpdateInput>
   implements IBaseRepository<T, CreateInput, UpdateInput>
 {
   protected prisma: PrismaClient;
+  protected prismaReplica?: PrismaClient = prismaReplicaInstance;
   protected modelName: string;
   protected supportsSoftDelete: boolean;
 
@@ -31,9 +45,9 @@ export abstract class BaseRepository<T, CreateInput, UpdateInput>
     this.supportsSoftDelete = supportsSoftDelete;
   }
 
-  protected getModel(tx?: any) {
-    const prismaInstance = tx || this.prisma;
-    return prismaInstance[this.modelName];
+  protected getModel(tx?: any, isReadOnly = false) {
+    const prismaInstance = tx || (isReadOnly && this.prismaReplica ? this.prismaReplica : this.prisma);
+    return (prismaInstance as any)[this.modelName];
   }
 
   private async executeWithTiming<R>(fn: () => Promise<R>): Promise<R> {
@@ -56,7 +70,7 @@ export abstract class BaseRepository<T, CreateInput, UpdateInput>
       if (this.supportsSoftDelete) {
         whereClause.deletedAt = null;
       }
-      return this.getModel(tx).findFirst({ where: whereClause });
+      return this.getModel(tx, true).findFirst({ where: whereClause });
     });
   }
 
@@ -110,14 +124,14 @@ export abstract class BaseRepository<T, CreateInput, UpdateInput>
       }
 
       const [items, total] = await Promise.all([
-        this.getModel(tx).findMany({
+        this.getModel(tx, true).findMany({
           where: whereClause,
           orderBy: params.orderBy,
           include: params.include,
           skip,
           take: limit,
         }),
-        this.getModel(tx).count({
+        this.getModel(tx, true).count({
           where: whereClause,
         }),
       ]);

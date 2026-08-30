@@ -41,6 +41,12 @@ export class MetricsService {
   private businessCampRegistrationsCounter: client.Counter;
   private businessNotificationsSentCounter: client.Counter;
 
+  // New Observability Metrics
+  private matchingLatencyHistogram: client.Histogram;
+  private inventoryConflictsCounter: client.Counter;
+  private reservationFailuresCounter: client.Counter;
+  private authOTPLockoutsCounter: client.Counter;
+
   constructor() {
     // 1. Initialize Registry
     this.registry = new client.Registry();
@@ -215,6 +221,32 @@ export class MetricsService {
       registers: [this.registry],
     });
 
+    // Register New Observability Metrics
+    this.matchingLatencyHistogram = new client.Histogram({
+      name: 'lifelink_matching_latency_seconds',
+      help: 'Matchmaking search execution times in seconds',
+      buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+      registers: [this.registry],
+    });
+
+    this.inventoryConflictsCounter = new client.Counter({
+      name: 'lifelink_inventory_conflicts_total',
+      help: 'Total number of concurrency conflicts (optimistic lock failures)',
+      registers: [this.registry],
+    });
+
+    this.reservationFailuresCounter = new client.Counter({
+      name: 'lifelink_inventory_reservation_failures_total',
+      help: 'Total number of failed inventory reservation requests',
+      registers: [this.registry],
+    });
+
+    this.authOTPLockoutsCounter = new client.Counter({
+      name: 'lifelink_auth_otp_lockouts_total',
+      help: 'Total number of OTP verification lockouts due to brute force limits',
+      registers: [this.registry],
+    });
+
     logger.info('Observability prom-client metrics registered successfully.');
   }
 
@@ -323,6 +355,23 @@ export class MetricsService {
 
   recordNotificationSent(type: string) {
     this.businessNotificationsSentCounter.inc({ type });
+  }
+
+  // New Observability helpers
+  recordMatchingLatency(durationSeconds: number) {
+    this.matchingLatencyHistogram.observe(durationSeconds);
+  }
+
+  recordInventoryConflict() {
+    this.inventoryConflictsCounter.inc();
+  }
+
+  recordReservationFailure() {
+    this.reservationFailuresCounter.inc();
+  }
+
+  recordOTPLockout() {
+    this.authOTPLockoutsCounter.inc();
   }
 
   // Fetch Output API

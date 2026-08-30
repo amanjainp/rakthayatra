@@ -9,8 +9,12 @@ import { mapsService } from './maps.service';
 import { firebaseService } from './firebase.service';
 import logger from '../config/logger';
 import { metricsService } from './metrics.service';
+import { env } from '../config/env';
 
 const prisma = new PrismaClient();
+const prismaReplica = env.DATABASE_URL_REPLICA
+  ? new PrismaClient({ datasources: { db: { url: env.DATABASE_URL_REPLICA } } })
+  : prisma;
 
 export class BloodRequestService {
   /**
@@ -282,9 +286,6 @@ export class BloodRequestService {
   async checkAndFlagExpiredRequests(userId?: string): Promise<BloodRequest[]> {
     const now = new Date();
     const expiredList = await prisma.$transaction(async (tx) => {
-      const requestRepo = new BloodRequestRepository(tx as any);
-      const auditLogRepo = new AuditLogRepository(tx as any);
-
       // Fetch pending or approved requests that are past expiresAt
       const expiredItems = await tx.bloodRequest.findMany({
         where: {
@@ -293,25 +294,33 @@ export class BloodRequestService {
         },
       });
 
-      const updatedList: BloodRequest[] = [];
-      for (const item of expiredItems) {
-        const updated = await requestRepo.update(item.id, {
-          status: 'CANCELLED',
+      if (expiredItems.length > 0) {
+        const itemIds = expiredItems.map((item) => item.id);
+        await tx.bloodRequest.updateMany({
+          where: { id: { in: itemIds } },
+          data: { status: 'CANCELLED' },
         });
-        updatedList.push(updated);
 
-        // Audit Log
-        await auditLogRepo.create({
-          user: userId ? { connect: { id: userId } } : undefined,
+        const auditLogsData = expiredItems.map((item) => ({
+          userId: userId || null,
           action: 'EXPIRE_BLOOD_REQUEST',
           details: {
             requestId: item.id,
             requesterId: item.requesterId,
           },
+        }));
+
+        await tx.auditLog.createMany({
+          data: auditLogsData,
         });
+
+        // Update in-memory status for return value
+        for (const item of expiredItems) {
+          item.status = 'CANCELLED';
+        }
       }
 
-      return updatedList;
+      return expiredItems;
     });
 
     if (expiredList.length > 0) {
@@ -370,7 +379,8 @@ export class BloodRequestService {
       score: number;
     }>;
   }> {
-    const requestRecord = await prisma.bloodRequest.findUnique({
+    const startTime = process.hrtime();
+    const requestRecord = await prismaReplica.bloodRequest.findUnique({
       where: { id: requestId },
     });
 
@@ -395,43 +405,61 @@ export class BloodRequestService {
       const minLon = requestRecord.longitude - Math.abs(lonDiff);
       const maxLon = requestRecord.longitude + Math.abs(lonDiff);
 
-      // Find compatible stocks at nearby blood banks
-      const bloodBankStocks = await prisma.bloodInventory.findMany({
+      // Find unique blood banks with compatible available inventory
+      const bloodBanks = await prismaReplica.bloodBankProfile.findMany({
         where: {
-          status: 'AVAILABLE',
-          bloodGroup: { in: compatibleGroups },
-          bloodBank: {
-            latitude: { gte: minLat, lte: maxLat },
-            longitude: { gte: minLon, lte: maxLon },
+          latitude: { gte: minLat, lte: maxLat },
+          longitude: { gte: minLon, lte: maxLon },
+          inventory: {
+            some: {
+              status: 'AVAILABLE',
+              bloodGroup: { in: compatibleGroups },
+            },
           },
         },
         include: {
-          bloodBank: true,
+          inventory: {
+            where: {
+              status: 'AVAILABLE',
+              bloodGroup: { in: compatibleGroups },
+            },
+            select: {
+              bloodGroup: true,
+              unitsCount: true,
+            },
+          },
         },
       });
 
       matchedBloodBanks = [];
-      for (const stock of bloodBankStocks) {
+      for (const bank of bloodBanks) {
         const distance = mapsService.calculateDistance(
           requestRecord.latitude,
           requestRecord.longitude,
-          stock.bloodBank.latitude,
-          stock.bloodBank.longitude
+          bank.latitude,
+          bank.longitude
         );
 
         if (distance <= radius) {
-          matchedBloodBanks.push({
-            id: stock.bloodBank.id,
-            name: stock.bloodBank.name,
-            bloodGroup: stock.bloodGroup,
-            availableUnits: stock.unitsCount,
-            distanceKm: parseFloat(distance.toFixed(2)),
-          });
+          const groupMap: Record<string, number> = {};
+          for (const stock of bank.inventory) {
+            groupMap[stock.bloodGroup] = (groupMap[stock.bloodGroup] || 0) + stock.unitsCount;
+          }
+
+          for (const [bloodGroup, unitsCount] of Object.entries(groupMap)) {
+            matchedBloodBanks.push({
+              id: bank.id,
+              name: bank.name,
+              bloodGroup: bloodGroup as any,
+              availableUnits: unitsCount,
+              distanceKm: parseFloat(distance.toFixed(2)),
+            });
+          }
         }
       }
 
       // 2. Search eligible donors
-      const donors = await prisma.donorProfile.findMany({
+      const donors = await prismaReplica.donorProfile.findMany({
         where: {
           isAvailable: true,
           deletedAt: null,
@@ -518,6 +546,10 @@ export class BloodRequestService {
         },
       },
     });
+
+    const diff = process.hrtime(startTime);
+    const durationSeconds = diff[0] + diff[1] / 1e9;
+    metricsService.recordMatchingLatency(durationSeconds);
 
     return {
       bloodBanks: matchedBloodBanks,

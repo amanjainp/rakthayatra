@@ -87,6 +87,14 @@ app.use((req: Request, res: Response) => {
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled Exception occurred: %O', err);
 
+  // Capture exception in Sentry
+  try {
+    const { Sentry } = require('./config/sentry');
+    Sentry.captureException(err);
+  } catch (se) {
+    logger.error('Sentry capture exception failed: %O', se);
+  }
+
   res.status(500).json({
     success: false,
     error: {
@@ -95,5 +103,13 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     },
   });
 });
+
+// Initialize Sentry at server startup
+try {
+  const { initSentry } = require('./config/sentry');
+  initSentry();
+} catch (e) {
+  logger.error('Failed to initialize Sentry: %O', e);
+}
 
 export default app;

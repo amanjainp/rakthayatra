@@ -10,6 +10,8 @@ const mockFindMany = jest.fn();
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockCount = jest.fn();
+const mockUpdateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
+const mockCreateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
 
 jest.mock('@prisma/client', () => {
   const actualPrisma = jest.requireActual('@prisma/client');
@@ -37,6 +39,7 @@ jest.mock('@prisma/client', () => {
     bloodBankProfile: {
       findFirst: (...args: any) => mockFindFirst(...args),
       findUnique: (...args: any) => mockFindUnique(...args),
+      findMany: (...args: any) => mockFindMany(...args),
     },
     bloodInventory: {
       findFirst: (...args: any) => mockFindFirst(...args),
@@ -44,12 +47,14 @@ jest.mock('@prisma/client', () => {
       findMany: (...args: any) => mockFindMany(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: (...args: any) => mockUpdateMany(...args),
     },
     bloodRequest: {
       findFirst: (...args: any) => mockFindFirst(...args),
       findUnique: (...args: any) => mockFindUnique(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: (...args: any) => mockUpdateMany(...args),
     },
     donation: {
       findFirst: (...args: any) => mockFindFirst(...args),
@@ -59,6 +64,7 @@ jest.mock('@prisma/client', () => {
     },
     auditLog: {
       create: (...args: any) => mockCreate(...args),
+      createMany: (...args: any) => mockCreateMany(...args),
     },
   };
 

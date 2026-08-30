@@ -30,6 +30,9 @@ jest.mock('@prisma/client', () => {
     auditLog: {
       create: jest.fn(),
     },
+    userConsent: {
+      create: jest.fn(),
+    },
   };
   localMockPrisma.$transaction = jest.fn((callback: (tx: any) => any) => callback(localMockPrisma));
 

@@ -134,12 +134,14 @@ jest.mock('@prisma/client', () => {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     bloodRequest: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     donation: {
       findUnique: jest.fn(),
@@ -163,6 +165,10 @@ jest.mock('@prisma/client', () => {
     auditLog: {
       create: jest.fn(),
       findMany: jest.fn(),
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    userConsent: {
+      create: jest.fn(),
     },
   };
   localMockPrisma.$transaction = jest.fn((callback: (tx: any) => any) => callback(localMockPrisma));

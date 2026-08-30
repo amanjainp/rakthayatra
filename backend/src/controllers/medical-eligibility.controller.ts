@@ -191,6 +191,22 @@ export class MedicalEligibilityController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Admin-only endpoint to re-encrypt old medical records.
+   */
+  async reEncrypt(req: AuthenticatedRequest, res: Response) {
+    try {
+      const result = await medicalEligibilityService.reEncryptRecords(req.user?.userId);
+      return res.status(200).json({
+        success: true,
+        message: `Successfully checked and re-encrypted ${result.reEncrypted} records.`,
+        data: result,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const medicalEligibilityController = new MedicalEligibilityController();
