@@ -1,0 +1,10 @@
+# Playwright
+playwright-report/
+test-results/
+stress-test-summary.json
+
+# k6
+*.har
+
+# Node
+node_modules/

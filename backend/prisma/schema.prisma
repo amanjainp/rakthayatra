@@ -141,14 +141,17 @@ model DonorProfile {
 }
 
 model MedicalEligibility {
-  id               String       @id @default(uuid())
-  donorProfileId   String       @unique
-  donor            DonorProfile @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
-  answers          Json
-  isEligible       Boolean      @default(true)
-  nextEligibleDate DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id                String       @id @default(uuid())
+  donorProfileId    String       @unique
+  donor             DonorProfile @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
+  answers           Json
+  isEligible        Boolean      @default(true)
+  nextEligibleDate  DateTime?
+  migrationStatus   String       @default("SUCCESS") // "SUCCESS", "FAILED", "PENDING"
+  migrationError    String?
+  migrationAttempts Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 model HospitalProfile {
@@ -317,4 +320,22 @@ model UserConsent {
   registrationTimestamp DateTime @default(now())
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model NotificationAudit {
+  id            String   @id @default(uuid())
+  type          String   // "EMAIL", "SMS", "PUSH"
+  recipient     String
+  subject       String?
+  body          String
+  status        String   // "PENDING", "DELIVERED", "FAILED", "DLQ"
+  provider      String?  // "SMTP", "TWILIO", "FIREBASE", "MOCK"
+  failureReason String?
+  attempts      Int      @default(0)
+  eventId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([status])
 }

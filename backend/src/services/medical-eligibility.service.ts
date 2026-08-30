@@ -218,10 +218,11 @@ export class MedicalEligibilityService {
   /**
    * Scan and re-encrypt all medical eligibility records to the latest version.
    */
-  async reEncryptRecords(userId?: string): Promise<{ total: number; reEncrypted: number }> {
+  async reEncryptRecords(userId?: string): Promise<{ total: number; reEncrypted: number; failed: number }> {
     const { encryptData, decryptData, ACTIVE_VERSION } = require('../utils/encryption');
     const records = await prisma.medicalEligibility.findMany();
     let reEncryptedCount = 0;
+    let failedCount = 0;
 
     for (const record of records) {
       if (record.answers) {
@@ -234,29 +235,44 @@ export class MedicalEligibilityService {
           }
         }
 
-        if (payload && payload._enc && payload.v < ACTIVE_VERSION) {
+        // Only re-encrypt if key version is older OR if it failed previously
+        if (payload && payload._enc && (payload.v < ACTIVE_VERSION || record.migrationStatus === 'FAILED')) {
           try {
             const plaintext = decryptData(payload);
             const newPayload = encryptData(plaintext);
 
             await prisma.medicalEligibility.update({
               where: { id: record.id },
-              data: { answers: newPayload as any },
+              data: { 
+                answers: newPayload as any,
+                migrationStatus: 'SUCCESS',
+                migrationError: null,
+              },
             });
 
             reEncryptedCount++;
           } catch (err: any) {
+            failedCount++;
             logger.error(`Failed to re-encrypt record ${record.id}: ${err.message}`);
+            
+            await prisma.medicalEligibility.update({
+              where: { id: record.id },
+              data: {
+                migrationStatus: 'FAILED',
+                migrationError: err.message || 'Decryption/re-encryption error',
+                migrationAttempts: record.migrationAttempts + 1,
+              },
+            });
           }
         }
       }
     }
 
-    if (reEncryptedCount > 0) {
-      logger.info(`[AUDIT] Action: RE_ENCRYPT_MEDICAL_RECORDS | Re-encrypted: ${reEncryptedCount} | TriggeredBy: ${userId || 'System'}`);
+    if (reEncryptedCount > 0 || failedCount > 0) {
+      logger.info(`[AUDIT] Action: RE_ENCRYPT_MEDICAL_RECORDS | Re-encrypted: ${reEncryptedCount} | Failed: ${failedCount} | TriggeredBy: ${userId || 'System'}`);
     }
 
-    return { total: records.length, reEncrypted: reEncryptedCount };
+    return { total: records.length, reEncrypted: reEncryptedCount, failed: failedCount };
   }
 }
 

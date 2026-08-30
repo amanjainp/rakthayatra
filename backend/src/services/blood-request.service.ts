@@ -7,6 +7,7 @@ import { BadRequestError, NotFoundError } from '../errors/app-error';
 import { BLOOD_COMPATIBILITY } from '../constants/app.constants';
 import { mapsService } from './maps.service';
 import { firebaseService } from './firebase.service';
+import { notificationService } from './notification.service';
 import logger from '../config/logger';
 import { metricsService } from './metrics.service';
 import { env } from '../config/env';
@@ -56,7 +57,7 @@ export class BloodRequestService {
     }
 
     // Capture matching donors to alert later (outside of transaction lock)
-    let donorsToNotify: string[] = [];
+    let donorsToNotify: any[] = [];
 
     const request = await prisma.$transaction(async (tx) => {
       const requestRepo = new BloodRequestRepository(tx as any);
@@ -119,8 +120,14 @@ export class BloodRequestService {
           },
           select: {
             userId: true,
+            phone: true,
             latitude: true,
             longitude: true,
+            user: {
+              select: {
+                email: true,
+              },
+            },
           },
         });
 
@@ -133,7 +140,11 @@ export class BloodRequestService {
             candidate.longitude
           );
           if (distance <= 50) {
-            donorsToNotify.push(candidate.userId);
+            donorsToNotify.push({
+              userId: candidate.userId,
+              email: candidate.user.email,
+              phone: candidate.phone,
+            });
           }
         }
       }
@@ -141,20 +152,32 @@ export class BloodRequestService {
       return record;
     });
 
-    // Alert matching donors asynchronously
+    // Alert matching donors asynchronously (FCM, SMS, Email)
     if (donorsToNotify.length > 0) {
       Promise.all(
-        donorsToNotify.map((donorUserId) =>
-          firebaseService
-            .sendPushNotification(
-              donorUserId,
-              'Urgent Blood Donation Required!',
-              `An emergency request for blood group ${data.bloodGroup} has been made near you. Please check your eligibility and donate!`,
-              'EMERGENCY_ALERT'
-            )
-            .catch((err) => logger.warn(`Failed to alert matching donor ${donorUserId}: ${err.message}`))
-        )
-      );
+        donorsToNotify.map(async (donor) => {
+          // 1. Send push alert
+          await firebaseService.sendPushNotification(
+            donor.userId,
+            'Urgent Blood Donation Required!',
+            `An emergency request for blood group ${data.bloodGroup} has been made near you. Please check your eligibility and donate!`,
+            'EMERGENCY_ALERT'
+          ).catch((err) => logger.warn(`Failed to alert matching donor ${donor.userId} via push: ${err.message}`));
+
+          // 2. Send SMS asynchronously
+          await notificationService.sendSMS(
+            donor.phone,
+            `Urgent: Emergency blood request for group ${data.bloodGroup} near you. Help save a life: check details inside Rakthayatra.`
+          );
+
+          // 3. Send Email asynchronously
+          await notificationService.sendEmail(
+            donor.email,
+            'Urgent Blood Donation Needed - Rakthayatra',
+            `An emergency request for blood group ${data.bloodGroup} has been made near you.\n\nPlease check your eligibility status and register to donate as soon as possible.`
+          );
+        })
+      ).catch((err) => logger.error(`Error in async matching donors dispatch group: ${err.message}`));
     }
 
     return request;

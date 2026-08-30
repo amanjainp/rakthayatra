@@ -30,58 +30,63 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: database-url
+                  name: lifelink-secrets
+                  key: DATABASE_URL
+            - name: DATABASE_URL_REPLICA
+              valueFrom:
+                secretKeyRef:
+                  name: lifelink-secrets
+                  key: DATABASE_URL_REPLICA
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: redis-url
+                  name: lifelink-secrets
+                  key: REDIS_URL
             - name: RABBITMQ_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: rabbitmq-url
+                  name: lifelink-secrets
+                  key: RABBITMQ_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: jwt-secret
+                  name: lifelink-secrets
+                  key: JWT_SECRET
             - name: ENCRYPTION_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: encryption-keys
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: aws-access-key-id
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: aws-secret-access-key
+                  name: lifelink-secrets
+                  key: ENCRYPTION_KEYS
             - name: GOOGLE_MAPS_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: google-maps-api-key
-            - name: FIREBASE_PROJECT_ID
+                  name: lifelink-secrets
+                  key: GOOGLE_MAPS_API_KEY
+            - name: SMTP_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: firebase-project-id
-            - name: FIREBASE_CLIENT_EMAIL
+                  name: lifelink-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASS
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: firebase-client-email
-            - name: FIREBASE_PRIVATE_KEY
+                  name: lifelink-secrets
+                  key: SMTP_PASS
+            - name: TWILIO_ACCOUNT_SID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-backend-secrets
-                  key: firebase-private-key
+                  name: lifelink-secrets
+                  key: TWILIO_ACCOUNT_SID
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lifelink-secrets
+                  key: TWILIO_AUTH_TOKEN
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: lifelink-secrets
+                  key: SENTRY_DSN
             - name: PORT
               value: "{{ .Values.backend.service.port }}"
             - name: NODE_ENV

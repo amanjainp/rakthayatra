@@ -1,41 +1,55 @@
 import crypto from 'crypto';
 import { env } from '../config/env';
 
-// Parse ENCRYPTION_KEYS (supports explicit versioning e.g. "1:key1,2:key2" or simple "key1,key2")
-const rawKeys = env.ENCRYPTION_KEYS.split(',');
-const keysMap: Record<number, Buffer> = {};
-let maxVersion = 1;
+// Mutable module-level state to support dynamic key rotation on-the-fly
+export let keysMap: Record<number, Buffer> = {};
+export let ACTIVE_VERSION = 1;
+export let ACTIVE_KEY: Buffer = Buffer.alloc(32, 'f') as Buffer;
 
-for (const raw of rawKeys) {
-  const parts = raw.split(':');
-  if (parts.length === 2) {
-    const version = parseInt(parts[0].trim(), 10);
-    const keyStr = parts[1].trim();
-    if (!isNaN(version)) {
+/**
+ * Parses and updates encryption keys mapping dynamically.
+ */
+export function reloadEncryptionKeys(rawEncryptionKeys: string): void {
+  const newKeysMap: Record<number, Buffer> = {};
+  const rawKeys = rawEncryptionKeys.split(',');
+  let maxVersion = 1;
+
+  for (const raw of rawKeys) {
+    const parts = raw.split(':');
+    if (parts.length === 2) {
+      const version = parseInt(parts[0].trim(), 10);
+      const keyStr = parts[1].trim();
+      if (!isNaN(version)) {
+        const normalized = keyStr.length < 32 
+          ? keyStr.padEnd(32, 'f').slice(0, 32)
+          : keyStr.slice(0, 32);
+        newKeysMap[version] = Buffer.from(normalized, 'utf8') as Buffer;
+        if (version > maxVersion) {
+          maxVersion = version;
+        }
+      }
+    } else {
+      // Backward compatibility fallback for index-based comma-separated key lists
+      const index = rawKeys.indexOf(raw);
+      const keyStr = raw.trim();
       const normalized = keyStr.length < 32 
         ? keyStr.padEnd(32, 'f').slice(0, 32)
         : keyStr.slice(0, 32);
-      keysMap[version] = Buffer.from(normalized, 'utf8');
-      if (version > maxVersion) {
-        maxVersion = version;
+      newKeysMap[index + 1] = Buffer.from(normalized, 'utf8') as Buffer;
+      if (index + 1 > maxVersion) {
+        maxVersion = index + 1;
       }
     }
-  } else {
-    // Backward compatibility fallback for index-based comma-separated key lists
-    const index = rawKeys.indexOf(raw);
-    const keyStr = raw.trim();
-    const normalized = keyStr.length < 32 
-      ? keyStr.padEnd(32, 'f').slice(0, 32)
-      : keyStr.slice(0, 32);
-    keysMap[index + 1] = Buffer.from(normalized, 'utf8');
-    if (index + 1 > maxVersion) {
-      maxVersion = index + 1;
-    }
   }
+
+  // Update in-memory configuration atomically
+  keysMap = newKeysMap;
+  ACTIVE_VERSION = maxVersion;
+  ACTIVE_KEY = (keysMap[ACTIVE_VERSION] ?? Buffer.alloc(32, 'f')) as Buffer;
 }
 
-const ACTIVE_VERSION = maxVersion;
-const ACTIVE_KEY = keysMap[ACTIVE_VERSION] || Buffer.alloc(32, 'f');
+// Perform initial reload during startup
+reloadEncryptionKeys(env.ENCRYPTION_KEYS || 'v1:default_encryption_key_placeholder');
 
 export interface EncryptedPayload {
   _enc: true;

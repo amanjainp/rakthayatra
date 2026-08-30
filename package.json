@@ -5,7 +5,8 @@
   "private": true,
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "tests-e2e-load"
   ],
   "scripts": {
     "install:all": "npm install",
@@ -14,6 +15,9 @@
     "build:backend": "npm run build --workspace=backend",
     "build:frontend": "npm run build --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
+    "test:e2e": "npm run test:e2e --workspace=tests-e2e-load",
+    "test:load": "npm run test:load --workspace=tests-e2e-load",
+    "test:stress": "npm run test:stress --workspace=tests-e2e-load",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend"
   },
   "devDependencies": {

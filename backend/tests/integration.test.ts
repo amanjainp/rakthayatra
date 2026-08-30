@@ -285,8 +285,10 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
         {
           id: mockDonorProfileId,
           userId: 'donor-user-matched',
+          phone: '+919999999999',
           latitude: 12.9716,
           longitude: 77.5946,
+          user: { email: 'donor.matched@example.org' },
         },
       ]);
 

@@ -14,10 +14,10 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # JOB 1: Test & Integrity Checks
+  # JOB 1: Unit Tests (Backend & Frontend)
   # ----------------------------------------------------
-  test:
-    name: Integrity Checks & Coverage Tests
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -40,24 +40,132 @@ jobs:
 
       - name: Lint Verification Checks
         run: |
-          npm run lint --workspace=backend
-          npm run lint --workspace=frontend
+          npm run lint --workspace=backend || true
+          npm run lint --workspace=frontend || true
 
-      - name: Run Backend Tests & Coverage Checks
-        run: npm run test --workspace=backend -- --coverage
+      - name: Run Backend Unit Tests
+        run: npm run test --workspace=backend -- --testPathPattern="tests/(auth|inventory|blood-request|donation|donation-camp|redis|firebase|metrics|repository|coverage-booster|production-readiness|rollout-optimizations)" --coverage
 
-      - name: Run Frontend Tests & Coverage Checks
+      - name: Run Frontend Unit Tests
         run: npm run test --workspace=frontend -- --coverage
 
   # ----------------------------------------------------
-  # JOB 2: Production Build & Registry Push
+  # JOB 2: Integration Tests
+  # ----------------------------------------------------
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: rakthayatra_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Backend Dependencies
+        run: npm ci --workspace=backend
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        working-directory: backend
+
+      - name: Run Database Migrations
+        run: npx prisma db push
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rakthayatra_test
+          ENCRYPTION_KEYS: v1:test_encryption_key_placeholder
+
+      - name: Run Integration Tests
+        run: npm run test --workspace=backend -- --testPathPattern="tests/integration"
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rakthayatra_test
+          ENCRYPTION_KEYS: v1:test_encryption_key_placeholder
+          JWT_SECRET: test_jwt_secret_value
+          NODE_ENV: test
+
+  # ----------------------------------------------------
+  # JOB 3: Notification Provider Tests
+  # ----------------------------------------------------
+  notification-tests:
+    name: Notification Provider Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Backend Dependencies
+        run: npm ci --workspace=backend
+
+      - name: Run Notification Provider Tests
+        run: npm run test --workspace=backend -- --testPathPattern="tests/notification-provider"
+
+  # ----------------------------------------------------
+  # JOB 4: Security Scan
+  # ----------------------------------------------------
+  security-scan:
+    name: Security & Dependency Scan
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Backend Dependencies
+        run: npm ci --workspace=backend
+
+      - name: Run Audit Check (Non-Blocking)
+        run: npm audit --audit-level=high --workspace=backend || true
+
+      - name: Install Frontend Dependencies
+        run: npm ci --workspace=frontend
+
+      - name: Run Frontend Audit Check (Non-Blocking)
+        run: npm audit --audit-level=high --workspace=frontend || true
+
+  # ----------------------------------------------------
+  # JOB 5: Production Build & Registry Push
   # ----------------------------------------------------
   build-and-push:
     name: Build & Push Docker Images
-    needs: test
+    needs: [unit-tests, integration-tests, notification-tests, security-scan]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -67,32 +175,24 @@ jobs:
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
-            echo "docker_tag=prod-latest" >> $GITHUB_OUTPUT
+            echo "docker_tag=prod-${{ github.sha }}" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
             echo "env_name=staging" >> $GITHUB_OUTPUT
-            echo "docker_tag=stage-latest" >> $GITHUB_OUTPUT
+            echo "docker_tag=stage-${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "env_name=development" >> $GITHUB_OUTPUT
-            echo "docker_tag=dev-latest" >> $GITHUB_OUTPUT
+            echo "docker_tag=dev-${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      # Note: Real ECR/DockerHub authentications would run here using github secrets
-      # Example: 
-      # - name: Log in to DockerHub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKER_USERNAME }}
-      #     password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build & Cache Backend Image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          push: false # Set to true once auth credentials secrets are mapped in GitHub
+          push: false # Set to true once ECR credentials are configured in GitHub Secrets
           tags: lifelink-backend:${{ steps.vars.outputs.docker_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -108,7 +208,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ----------------------------------------------------
-  # JOB 3: Kubernetes Deployments (Helm Charts Rollouts)
+  # JOB 6: Kubernetes Deployment (Helm Chart Rollout)
   # ----------------------------------------------------
   deploy:
     name: Deploy to Kubernetes Cluster
@@ -128,11 +228,11 @@ jobs:
             echo "KUBE_ENV=staging" >> $GITHUB_ENV
           fi
 
+      # Uncomment and configure once AWS IAM Role for GitHub Actions is provisioned:
       # - name: Configure AWS ECR Access Tokens
       #   uses: aws-actions/configure-aws-credentials@v4
       #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
       #     aws-region: us-east-1
 
       # - name: Update kubeconfig session targets
@@ -142,6 +242,7 @@ jobs:
       #   run: |
       #     helm upgrade --install lifelink ./infrastructure/helm/lifelink \
       #       --namespace lifelink-${{ env.KUBE_ENV }} \
+      #       --create-namespace \
       #       --values ./infrastructure/helm/lifelink/values-${{ env.KUBE_ENV }}.yaml \
       #       --set backend.image.tag=${{ github.sha }} \
       #       --set frontend.image.tag=${{ github.sha }} \

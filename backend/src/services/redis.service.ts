@@ -127,6 +127,32 @@ export class RedisService {
   }
 
   /**
+   * Set key value only if it does not already exist.
+   * Returns true if set was successful, false if it already exists.
+   */
+  async setNX(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    metricsService.recordCacheOp();
+
+    if (this.isMockMode) {
+      const record = this.mockStore.get(key);
+      if (record && (!record.expiresAt || Date.now() <= record.expiresAt)) {
+        return false;
+      }
+      const expiresAt = Date.now() + ttlSeconds * 1000;
+      this.mockStore.set(key, { value, expiresAt });
+      return true;
+    }
+
+    try {
+      const result = await this.client!.set(key, value, 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch (error: any) {
+      logger.error(`Redis SETNX error for key "${key}": ${error.message}`);
+      return true; // Fallback safely to prevent message blocking
+    }
+  }
+
+  /**
    * Deletes a key from the cache.
    */
   async del(key: string): Promise<void> {
