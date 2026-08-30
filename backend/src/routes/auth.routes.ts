@@ -30,15 +30,39 @@ const registerLimiter = rateLimit({
   },
 });
 
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    error: {
+      code: 'TOO_MANY_OTP_ATTEMPTS',
+      message: 'Too many OTP requests. Please try again after 15 minutes.',
+    },
+  },
+});
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    success: false,
+    error: {
+      code: 'TOO_MANY_PASSWORD_RESETS',
+      message: 'Too many password reset attempts. Please try again after 15 minutes.',
+    },
+  },
+});
+
 // Authentication Routes
 router.post('/register', registerLimiter, authController.register);
 router.post('/login', loginLimiter, authController.login);
 router.post('/logout', authController.logout);
 router.post('/refresh', authController.refresh);
-router.post('/verify-otp', authController.verifyOtp);
-router.post('/resend-otp', authController.resendOtp);
-router.post('/forgot-password', authController.forgotPassword);
-router.post('/reset-password', authController.resetPassword);
+router.post('/verify-otp', otpLimiter, authController.verifyOtp);
+router.post('/resend-otp', otpLimiter, authController.resendOtp);
+router.post('/forgot-password', passwordResetLimiter, authController.forgotPassword);
+router.post('/reset-password', passwordResetLimiter, authController.resetPassword);
 
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();

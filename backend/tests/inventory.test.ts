@@ -217,7 +217,7 @@ describe('Inventory Module API Endpoint Tests', () => {
 
       const response = await request(app)
         .post(`/api/inventory/release/${inventoryId}`)
-        .set('Authorization', `Bearer ${hospitalToken}`);
+        .set('Authorization', `Bearer ${bankToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);

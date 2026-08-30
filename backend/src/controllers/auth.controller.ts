@@ -93,7 +93,9 @@ export class AuthController {
 
       // In production, OTP is sent via SMS/Email (Milestone 4).
       // For Milestone 3 verification, we yield it in response metadata.
-      logger.info(`OTP generated for ${body.email}: ${otp}`);
+      if (process.env.NODE_ENV !== 'production') {
+        logger.info(`OTP generated for ${body.email}: ${otp}`);
+      }
 
       return res.status(201).json({
         success: true,
@@ -103,7 +105,7 @@ export class AuthController {
           email: user.email,
           role: body.role,
           status: user.status,
-          otp, // Returned only for local integration/testing verification stubs
+          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
         },
       });
     } catch (error: any) {
@@ -285,13 +287,15 @@ export class AuthController {
       const body = forgotPasswordSchema.parse(req.body);
       const otp = await authService.resendOtp(body.email);
 
-      logger.info(`Resent OTP generated for ${body.email}: ${otp}`);
+      if (process.env.NODE_ENV !== 'production') {
+        logger.info(`Resent OTP generated for ${body.email}: ${otp}`);
+      }
 
       return res.status(200).json({
         success: true,
         message: 'Verification OTP resent successfully.',
         data: {
-          otp, // Verification mock hook
+          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
         },
       });
     } catch (error: any) {
@@ -320,13 +324,15 @@ export class AuthController {
       const body = forgotPasswordSchema.parse(req.body);
       const resetToken = await authService.forgotPassword(body.email);
 
-      logger.info(`Reset token generated for ${body.email}: ${resetToken}`);
+      if (process.env.NODE_ENV !== 'production') {
+        logger.info(`Reset token generated for ${body.email}: ${resetToken}`);
+      }
 
       return res.status(200).json({
         success: true,
         message: 'Password reset instructions generated.',
         data: {
-          resetToken, // Verification mock hook
+          ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
         },
       });
     } catch (error: any) {

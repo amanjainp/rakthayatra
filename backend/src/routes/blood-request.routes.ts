@@ -27,6 +27,11 @@ router.post('/:id/fulfill', authenticate, requireRoles(['HOSPITAL', 'BLOOD_BANK'
 // 5. Cancel request (Authenticated users - ownership checked in controller)
 router.post('/:id/cancel', authenticate, (req, res) => bloodRequestController.cancel(req, res));
 
+// Get intelligent matches (Hospitals, Patients, Admins)
+router.get('/:id/matches', authenticate, requireRoles(['HOSPITAL', 'PATIENT', 'ADMIN']), (req, res) =>
+  bloodRequestController.getMatches(req, res)
+);
+
 // 6. Get map coordinates (Authenticated users)
 router.get('/map', authenticate, (req, res) => bloodRequestController.getMapLocations(req, res));
 

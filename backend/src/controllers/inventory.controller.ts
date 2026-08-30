@@ -172,6 +172,23 @@ export class InventoryController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Triggers manual sweep of expired reservations (Admins only).
+   */
+  async triggerReservationsSweep(req: AuthenticatedRequest, res: Response) {
+    try {
+      const updated = await inventoryService.sweepExpiredReservations(req.user?.userId);
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully released ${updated.length} expired reservations.`,
+        data: { releasedReservationsCount: updated.length },
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const inventoryController = new InventoryController();

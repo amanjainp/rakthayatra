@@ -80,15 +80,16 @@ export const useCamps = () => {
 
   const createCampMutation = useMutation({
     mutationFn: async (data: { name: string; location: string; startDate: string; endDate: string; bloodBankId: string; latitude: number; longitude: number }) => {
+      const location = data?.location || '';
       const payload = {
-        name: data.name,
+        name: data?.name || '',
         organizer: 'Red Cross Society & LifeLink',
-        address: data.location,
-        city: data.location.toLowerCase().includes('bengaluru') || data.location.toLowerCase().includes('bangalore') ? 'Bengaluru' : 'Noida',
-        latitude: data.latitude,
-        longitude: data.longitude,
-        startDate: data.startDate,
-        endDate: data.endDate,
+        address: location,
+        city: location.toLowerCase().includes('bengaluru') || location.toLowerCase().includes('bangalore') ? 'Bengaluru' : 'Noida',
+        latitude: data?.latitude || 0,
+        longitude: data?.longitude || 0,
+        startDate: data?.startDate || '',
+        endDate: data?.endDate || '',
       };
       const res = await apiClient.post('/camps', payload);
       return res.data;

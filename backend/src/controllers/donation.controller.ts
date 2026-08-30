@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { donationService } from '../services/donation.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
-import { AppError, BadRequestError, NotFoundError } from '../errors/app-error';
+import { AppError, BadRequestError, NotFoundError, ForbiddenError } from '../errors/app-error';
 import { PrismaClient } from '@prisma/client';
 import logger from '../config/logger';
 
@@ -174,6 +174,10 @@ export class DonationController {
         throw new NotFoundError('Donor profile record not found.');
       }
 
+      if (req.user?.role !== 'ADMIN' && req.user?.role !== 'BLOOD_BANK' && donorProfile.userId !== req.user?.userId) {
+        throw new ForbiddenError('You do not have permission to access another donor\'s data.');
+      }
+
       const parsed = querySchema.parse(req.query);
       const history = await donationService.getDonorHistory(donorProfile.id, {
         page: parsed.page,
@@ -211,6 +215,10 @@ export class DonationController {
 
        if (!donorProfile) {
          throw new NotFoundError('Donor profile record not found.');
+       }
+
+       if (req.user?.role !== 'ADMIN' && req.user?.role !== 'BLOOD_BANK' && donorProfile.userId !== req.user?.userId) {
+         throw new ForbiddenError('You do not have permission to access another donor\'s data.');
        }
 
        const stats = await donationService.getDonorStatistics(donorProfile.id);

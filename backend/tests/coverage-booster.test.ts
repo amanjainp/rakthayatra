@@ -119,6 +119,7 @@ jest.mock('@prisma/client', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      upsert: jest.fn(),
     },
     donationCamp: {
       findUnique: jest.fn(),
@@ -492,6 +493,7 @@ describe('Backend Coverage booster Tests', () => {
       prisma.medicalEligibility.findFirst.mockResolvedValue(null);
       prisma.medicalEligibility.findUnique.mockResolvedValue(null);
       prisma.medicalEligibility.create.mockResolvedValue({ id: 'elig-1' });
+      prisma.medicalEligibility.upsert.mockResolvedValue({ id: 'elig-1' });
       prisma.donorProfile.update.mockResolvedValue({});
       prisma.auditLog.create.mockResolvedValue({});
       prisma.auditLog.findMany.mockResolvedValue([]);

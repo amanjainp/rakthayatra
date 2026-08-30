@@ -108,18 +108,20 @@ export class InventoryService {
       let reservedRecord: BloodInventory;
 
       if (inventory.unitsCount === data.unitsToReserve) {
-        // Reserve the entire batch
-        reservedRecord = await inventoryRepo.update(data.inventoryId, {
-          status: 'RESERVED',
-        });
+        // Reserve the entire batch using optimistic lock check
+        reservedRecord = await inventoryRepo.updateWithOptimisticLock(
+          data.inventoryId,
+          { status: 'RESERVED' },
+          inventory.updatedAt
+        );
       } else {
         // Fractional reservation
         const remainingCount = inventory.unitsCount - data.unitsToReserve;
 
         // Deduct from available using optimistic lock check
-        await inventoryRepo.updateUnitsCountWithOptimisticLock(
+        await inventoryRepo.updateWithOptimisticLock(
           data.inventoryId,
-          remainingCount,
+          { unitsCount: remainingCount },
           inventory.updatedAt
         );
 
@@ -246,6 +248,58 @@ export class InventoryService {
     }
 
     return expiredList;
+  }
+  
+  /**
+   * Automatically releases reservations that have been in RESERVED status for longer than 24 hours.
+   */
+  async sweepExpiredReservations(userId?: string): Promise<BloodInventory[]> {
+    const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
+    const releasedList = await prisma.$transaction(async (tx) => {
+      const inventoryRepo = new InventoryRepository(tx as any);
+      const auditLogRepo = new AuditLogRepository(tx as any);
+
+      // Find reserved units that haven't been updated for 24h
+      const expiredReservations = await tx.bloodInventory.findMany({
+        where: {
+          status: 'RESERVED',
+          updatedAt: { lte: threshold },
+        },
+      });
+
+      const updatedList: BloodInventory[] = [];
+      for (const batch of expiredReservations) {
+        const updated = await inventoryRepo.update(batch.id, {
+          status: 'AVAILABLE',
+        });
+        updatedList.push(updated);
+
+        // Audit Log
+        await auditLogRepo.create({
+          user: userId ? { connect: { id: userId } } : undefined,
+          action: 'RELEASE_EXPIRED_RESERVATION',
+          details: {
+            inventoryId: batch.id,
+            unitsReleased: batch.unitsCount,
+            bloodBankId: batch.bloodBankId,
+          },
+        });
+      }
+
+      return updatedList;
+    });
+
+    // Invalidate caches
+    const bankIds = Array.from(new Set(releasedList.map((e) => e.bloodBankId)));
+    for (const bankId of bankIds) {
+      await this.invalidateCache(bankId);
+    }
+
+    if (releasedList.length > 0) {
+      logger.info(`Successfully released ${releasedList.length} expired blood inventory reservations.`);
+    }
+
+    return releasedList;
   }
 
   /**

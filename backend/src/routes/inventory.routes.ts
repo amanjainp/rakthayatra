@@ -17,14 +17,19 @@ router.post('/reserve', authenticate, requireRoles(['HOSPITAL', 'BLOOD_BANK', 'A
   inventoryController.reserve(req, res)
 );
 
-// 4. Release units (Hospitals, Blood Banks & Admins)
-router.post('/release/:id', authenticate, requireRoles(['HOSPITAL', 'BLOOD_BANK', 'ADMIN']), (req, res) =>
+// 4. Release units (Blood Banks & Admins only)
+router.post('/release/:id', authenticate, requireRoles(['BLOOD_BANK', 'ADMIN']), (req, res) =>
   inventoryController.release(req, res)
 );
 
 // 5. Trigger scan for expired units (Admins only)
 router.post('/expiry-check', authenticate, requireRoles(['ADMIN']), (req, res) =>
   inventoryController.triggerExpiryCheck(req, res)
+);
+
+// 6. Trigger sweep for expired reservations (Admins only)
+router.post('/reservations-sweep', authenticate, requireRoles(['ADMIN']), (req, res) =>
+  inventoryController.triggerReservationsSweep(req, res)
 );
 
 export default router;

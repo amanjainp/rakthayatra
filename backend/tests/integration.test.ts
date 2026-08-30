@@ -226,7 +226,7 @@ describe('Rakthayatra Business Modules Integration Tests', () => {
       // Verify inventory was split/updated
       // 1. Deducted remaining units from available inventory
       expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: mockInventoryId },
+        where: expect.objectContaining({ id: mockInventoryId }),
         data: expect.objectContaining({
           unitsCount: 3, // 5 - 2
         }),

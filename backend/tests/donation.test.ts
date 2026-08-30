@@ -247,9 +247,19 @@ describe('Donation Module API Endpoint Tests', () => {
       mockFindMany.mockResolvedValue([
         { id: 'don-1', status: 'COMPLETED', unitsDonated: 1, donationDate: new Date() },
       ]);
-      mockFindFirst.mockResolvedValue({
-        isEligible: true,
-        nextEligibleDate: null,
+      mockFindFirst.mockImplementation((params: any) => {
+        // Donor profile lookup
+        if (params?.where && (params.where.id === donorId || params.where.userId === donorId)) {
+          return Promise.resolve({
+            id: donorId,
+            userId: 'donor-usr-1',
+          });
+        }
+        // Eligibility lookup
+        return Promise.resolve({
+          isEligible: true,
+          nextEligibleDate: null,
+        });
       });
 
       const response = await request(app)

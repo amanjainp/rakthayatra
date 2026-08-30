@@ -114,11 +114,25 @@ export class DonationService {
         throw new NotFoundError('Donor profile associated with this donation was not found.');
       }
 
-      // 3. Update donation status to COMPLETED
-      const updatedDonation = await donationRepo.update(donationId, {
-        status: 'COMPLETED',
-        notes: data.notes,
-      });
+      // 3. Update donation status to COMPLETED (ensuring status is PENDING to prevent double-completion)
+      let updatedDonation;
+      try {
+        updatedDonation = await tx.donation.update({
+          where: {
+            id: donationId,
+            status: 'PENDING',
+          },
+          data: {
+            status: 'COMPLETED',
+            notes: data.notes,
+          },
+        });
+      } catch (error: any) {
+        if (error.code === 'P2025') {
+          throw new BadRequestError('Donation has already been completed or cancelled.');
+        }
+        throw error;
+      }
 
       metricsService.recordDonationCompleted();
 

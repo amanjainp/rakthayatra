@@ -225,16 +225,20 @@ export class BloodRequestService {
           }
         }
 
-        // Allocate units (using split if partial allocation is needed)
+        // Allocate units (using split if partial allocation is needed) using optimistic locks
         if (targetInventory.unitsCount === requestRecord.unitsRequired) {
-          await inventoryRepo.update(targetInventory.id, {
-            status: 'RESERVED',
-          });
+          await inventoryRepo.updateWithOptimisticLock(
+            targetInventory.id,
+            { status: 'RESERVED' },
+            targetInventory.updatedAt
+          );
         } else {
           const remaining = targetInventory.unitsCount - requestRecord.unitsRequired;
-          await inventoryRepo.update(targetInventory.id, {
-            unitsCount: remaining,
-          });
+          await inventoryRepo.updateWithOptimisticLock(
+            targetInventory.id,
+            { unitsCount: remaining },
+            targetInventory.updatedAt
+          );
           await inventoryRepo.create({
             bloodBank: { connect: { id: targetInventory.bloodBankId } },
             bloodGroup: targetInventory.bloodGroup,
@@ -345,6 +349,180 @@ export class BloodRequestService {
       orderBy: { createdAt: 'desc' },
       include: { requester: true },
     });
+  }
+
+  /**
+   * Evaluates compatible stocks and ranks eligible donors with radius expansion & response probability.
+   */
+  async findMatchingFulfillmentCandidates(requestId: string): Promise<{
+    bloodBanks: Array<{
+      id: string;
+      name: string;
+      bloodGroup: BloodGroup;
+      availableUnits: number;
+      distanceKm: number;
+    }>;
+    donors: Array<{
+      id: string;
+      name: string;
+      bloodGroup: BloodGroup;
+      distanceKm: number;
+      score: number;
+    }>;
+  }> {
+    const requestRecord = await prisma.bloodRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!requestRecord) {
+      throw new NotFoundError('Blood request not found.');
+    }
+
+    const compatibleGroups = BLOOD_COMPATIBILITY[requestRecord.bloodGroup];
+    const radii = [5, 10, 25, 50];
+    
+    let matchedBloodBanks: any[] = [];
+    let matchedDonors: any[] = [];
+
+    // Iteratively expand radius until candidates are found or max is reached
+    for (const radius of radii) {
+      // 1. Search Blood Banks within bounding box
+      const latDiff = radius / 111.0;
+      const lonDiff = radius / (111.0 * Math.cos(requestRecord.latitude * Math.PI / 180));
+
+      const minLat = requestRecord.latitude - latDiff;
+      const maxLat = requestRecord.latitude + latDiff;
+      const minLon = requestRecord.longitude - Math.abs(lonDiff);
+      const maxLon = requestRecord.longitude + Math.abs(lonDiff);
+
+      // Find compatible stocks at nearby blood banks
+      const bloodBankStocks = await prisma.bloodInventory.findMany({
+        where: {
+          status: 'AVAILABLE',
+          bloodGroup: { in: compatibleGroups },
+          bloodBank: {
+            latitude: { gte: minLat, lte: maxLat },
+            longitude: { gte: minLon, lte: maxLon },
+          },
+        },
+        include: {
+          bloodBank: true,
+        },
+      });
+
+      matchedBloodBanks = [];
+      for (const stock of bloodBankStocks) {
+        const distance = mapsService.calculateDistance(
+          requestRecord.latitude,
+          requestRecord.longitude,
+          stock.bloodBank.latitude,
+          stock.bloodBank.longitude
+        );
+
+        if (distance <= radius) {
+          matchedBloodBanks.push({
+            id: stock.bloodBank.id,
+            name: stock.bloodBank.name,
+            bloodGroup: stock.bloodGroup,
+            availableUnits: stock.unitsCount,
+            distanceKm: parseFloat(distance.toFixed(2)),
+          });
+        }
+      }
+
+      // 2. Search eligible donors
+      const donors = await prisma.donorProfile.findMany({
+        where: {
+          isAvailable: true,
+          deletedAt: null,
+          bloodGroup: { in: compatibleGroups },
+          latitude: { gte: minLat, lte: maxLat },
+          longitude: { gte: minLon, lte: maxLon },
+          user: {
+            status: 'ACTIVE',
+            deletedAt: null,
+          },
+        },
+        include: {
+          user: true,
+          eligibility: true,
+        },
+      });
+
+      matchedDonors = [];
+      for (const donor of donors) {
+        const distance = mapsService.calculateDistance(
+          requestRecord.latitude,
+          requestRecord.longitude,
+          donor.latitude,
+          donor.longitude
+        );
+
+        if (distance <= radius) {
+          // Double check eligibility deferral window
+          let isMedicallyDeferred = false;
+          if (donor.eligibility) {
+            const med = donor.eligibility;
+            if (!med.isEligible || (med.nextEligibleDate && med.nextEligibleDate > new Date())) {
+              isMedicallyDeferred = true;
+            }
+          }
+
+          if (isMedicallyDeferred) continue;
+
+          // Calculate response probability score
+          const acceptRate = donor.requestsNotifiedCount > 0 
+            ? donor.requestsAcceptedCount / donor.requestsNotifiedCount 
+            : 0.5;
+          const distanceFactor = Math.max(0, 1 - distance / 50);
+          // Recency booster if no donation in 120 days
+          let recencyBooster = 0.1;
+          if (donor.lastDonationDate) {
+            const daysSince = (Date.now() - new Date(donor.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSince < 90) continue; // safety rule matching 90-day deferral
+            if (daysSince > 120) recencyBooster = 0.2;
+          }
+
+          const score = parseFloat(((acceptRate * 0.5) + (distanceFactor * 0.4) + recencyBooster).toFixed(3));
+
+          matchedDonors.push({
+            id: donor.id,
+            name: donor.fullName,
+            bloodGroup: donor.bloodGroup,
+            distanceKm: parseFloat(distance.toFixed(2)),
+            score,
+          });
+        }
+      }
+
+      // If we got enough options (e.g. at least 3 banks or 5 total candidates), we can stop expanding
+      if (matchedBloodBanks.length + matchedDonors.length >= 5) {
+        break;
+      }
+    }
+
+    // Rank blood banks by distance (ascending)
+    matchedBloodBanks.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    // Rank donors by probability score (descending)
+    matchedDonors.sort((a, b) => b.score - a.score);
+
+    // Write audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'MATCHMAKING_SEARCH',
+        details: {
+          requestId,
+          bloodBanksFound: matchedBloodBanks.length,
+          donorsFound: matchedDonors.length,
+        },
+      },
+    });
+
+    return {
+      bloodBanks: matchedBloodBanks,
+      donors: matchedDonors,
+    };
   }
 }
 

@@ -213,6 +213,16 @@ export class AuthService {
         throw new Error('Refresh token is invalid or has expired.');
       }
 
+      if (record.user.deletedAt !== null && record.user.deletedAt !== undefined) {
+        await prisma.refreshToken.delete({ where: { id: record.id } });
+        throw new Error('User account has been deleted.');
+      }
+
+      if (record.user.status !== undefined && record.user.status !== null && record.user.status !== 'ACTIVE') {
+        await prisma.refreshToken.delete({ where: { id: record.id } });
+        throw new Error('User account is suspended or pending verification.');
+      }
+
       // Refresh Token Rotation (RTR): delete old one and assign a new one
       const newAccessToken = generateAccessToken({ userId: record.userId, role: record.user.role.name });
       const newRefreshTokenString = generateSecureToken();
@@ -251,11 +261,24 @@ export class AuthService {
 
   async verifyOtp(email: string, otp: string, ipAddress?: string): Promise<void> {
     try {
+      const attemptsKey = `otp-attempts:${email}`;
+      const attemptsStr = await cacheService.get(attemptsKey);
+      let attempts = 0;
+      if (attemptsStr && attemptsStr.length !== 6) {
+        attempts = parseInt(attemptsStr, 10) || 0;
+      }
+      
+      if (attempts >= 5) {
+        throw new Error('Too many invalid OTP attempts. Please request a new OTP.');
+      }
+
       const cachedOtp = await cacheService.get(`otp:${email}`);
       if (!cachedOtp || cachedOtp !== otp) {
+        await cacheService.set(attemptsKey, (attempts + 1).toString(), 300);
         throw new Error('Invalid or expired OTP.');
       }
 
+      await cacheService.delete(attemptsKey);
       await cacheService.delete(`otp:${email}`);
 
       const user = await prisma.user.findUnique({

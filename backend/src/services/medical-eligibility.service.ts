@@ -28,7 +28,6 @@ export class MedicalEligibilityService {
     }
 
     const evaluated = await prisma.$transaction(async (tx) => {
-      const eligibilityRepo = new MedicalEligibilityRepository(tx as any);
       const donorRepo = new DonorRepository(tx as any);
       const auditLogRepo = new AuditLogRepository(tx as any);
 
@@ -112,23 +111,20 @@ export class MedicalEligibilityService {
       }
 
       // 3. Upsert MedicalEligibility record
-      let record: MedicalEligibility;
-      const existing = await eligibilityRepo.findByDonorId(donorProfileId);
-
-      if (existing) {
-        record = await eligibilityRepo.update(existing.id, {
+      const record = await tx.medicalEligibility.upsert({
+        where: { donorProfileId },
+        update: {
           answers: JSON.stringify(answers),
           isEligible,
           nextEligibleDate,
-        });
-      } else {
-        record = await eligibilityRepo.create({
-          donor: { connect: { id: donorProfileId } },
+        },
+        create: {
+          donorProfileId,
           answers: JSON.stringify(answers),
           isEligible,
           nextEligibleDate,
-        });
-      }
+        },
+      });
 
       // 4. Update Donor Profile availability matching eligibility
       await donorRepo.update(donorProfileId, {

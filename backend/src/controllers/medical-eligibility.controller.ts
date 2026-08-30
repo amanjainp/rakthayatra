@@ -131,6 +131,10 @@ export class MedicalEligibilityController {
         throw new NotFoundError('Donor profile record not found.');
       }
 
+      if (req.user?.role !== 'ADMIN' && req.user?.role !== 'BLOOD_BANK' && donor.userId !== req.user?.userId) {
+        throw new ForbiddenError('You do not have permission to access another donor\'s data.');
+      }
+
       const eligibility = await medicalEligibilityService.getDonorEligibility(donor.id);
       if (!eligibility) {
         return res.status(200).json({
@@ -171,6 +175,10 @@ export class MedicalEligibilityController {
 
       if (!donor) {
         throw new NotFoundError('Donor profile record not found.');
+      }
+
+      if (req.user?.role !== 'ADMIN' && req.user?.role !== 'BLOOD_BANK' && donor.userId !== req.user?.userId) {
+        throw new ForbiddenError('You do not have permission to access another donor\'s data.');
       }
 
       const history = await medicalEligibilityService.getEligibilityHistory(donor.id);

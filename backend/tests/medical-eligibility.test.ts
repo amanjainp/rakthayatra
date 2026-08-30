@@ -8,6 +8,7 @@ const mockFindUnique = jest.fn();
 const mockFindMany = jest.fn();
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
+const mockUpsert = jest.fn();
 
 jest.mock('@prisma/client', () => {
   const actualPrisma = jest.requireActual('@prisma/client');
@@ -29,6 +30,7 @@ jest.mock('@prisma/client', () => {
       findUnique: (...args: any) => mockFindUnique(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      upsert: (...args: any) => mockUpsert(...args),
     },
     auditLog: {
       create: (...args: any) => mockCreate(...args),
@@ -57,6 +59,14 @@ describe('Medical Eligibility Module API Endpoint Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUpsert.mockImplementation((args: any) => {
+      return Promise.resolve({
+        id: 'elig-12345',
+        donorProfileId: args.where?.donorProfileId || args.create?.donorProfileId,
+        isEligible: args.update?.isEligible ?? args.create?.isEligible ?? true,
+        nextEligibleDate: args.update?.nextEligibleDate ?? args.create?.nextEligibleDate ?? null,
+      });
+    });
   });
 
   describe('POST /api/eligibility (Submit Questionnaire)', () => {
@@ -230,6 +240,11 @@ describe('Medical Eligibility Module API Endpoint Tests', () => {
 
   describe('GET /api/eligibility/donor/:id (Get Current Status)', () => {
     it('should retrieve status successfully', async () => {
+      mockFindUnique.mockResolvedValue({
+        id: mockDonorId,
+        userId: 'donor-usr-1',
+      });
+
       mockFindFirst.mockResolvedValue({
         id: 'elig-12345',
         donorProfileId: mockDonorId,

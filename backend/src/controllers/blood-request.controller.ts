@@ -237,6 +237,27 @@ export class BloodRequestController {
   }
 
   /**
+   * Retrieves intelligent matches for a blood request.
+   */
+  async getMatches(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+        throw new BadRequestError('Invalid blood request ID parameter.');
+      }
+
+      const result = await bloodRequestService.findMatchingFulfillmentCandidates(id);
+
+      return res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
    * Retrieves real-time coordinates/markers for compatible donors, blood banks, and emergency requests.
    */
   async getMapLocations(req: Request, res: Response) {
@@ -431,11 +452,11 @@ export class BloodRequestController {
           markers.push({
             id: `donor-${donor.id}`,
             type: 'DONOR',
-            name: donor.fullName,
+            name: `Donor (${donor.bloodGroup})`,
             bloodGroup: donor.bloodGroup,
             latitude: dispersed.lat,
             longitude: dispersed.lng,
-            contact: donor.phone,
+            contact: 'Contact masked for privacy',
             distanceKm: dist,
           });
         }

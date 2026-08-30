@@ -11,6 +11,12 @@ export interface IInventoryRepository
     expectedUpdatedAt: Date,
     tx?: any
   ): Promise<BloodInventory>;
+  updateWithOptimisticLock(
+    id: string,
+    data: Prisma.BloodInventoryUpdateInput,
+    expectedUpdatedAt: Date,
+    tx?: any
+  ): Promise<BloodInventory>;
   findLowStock(threshold: number, tx?: any): Promise<BloodInventory[]>;
 }
 
@@ -32,9 +38,9 @@ export class InventoryRepository
    * Safe updates using Optimistic Locking.
    * Compares the target record's updatedAt timestamp and throws a ConflictError if a concurrent query modified it.
    */
-  async updateUnitsCountWithOptimisticLock(
+  async updateWithOptimisticLock(
     id: string,
-    newCount: number,
+    data: Prisma.BloodInventoryUpdateInput,
     expectedUpdatedAt: Date,
     tx?: any
   ): Promise<BloodInventory> {
@@ -44,9 +50,7 @@ export class InventoryRepository
           id,
           updatedAt: expectedUpdatedAt,
         },
-        data: {
-          unitsCount: newCount,
-        },
+        data,
       });
     } catch (error: any) {
       // Prisma error code for constraint/where clause failure: P2025
@@ -55,6 +59,15 @@ export class InventoryRepository
       }
       throw error;
     }
+  }
+
+  async updateUnitsCountWithOptimisticLock(
+    id: string,
+    newCount: number,
+    expectedUpdatedAt: Date,
+    tx?: any
+  ): Promise<BloodInventory> {
+    return this.updateWithOptimisticLock(id, { unitsCount: newCount }, expectedUpdatedAt, tx);
   }
 
   async findLowStock(threshold: number, tx?: any): Promise<BloodInventory[]> {
