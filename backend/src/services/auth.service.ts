@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { generateAccessToken, generateSecureToken, generateOTP } from '../utils/crypto';
 import { cacheService } from './cache.service';
 import { metricsService } from './metrics.service';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
@@ -102,6 +103,18 @@ export class AuthService {
       const otp = generateOTP();
       await cacheService.set(`otp:${email}`, otp, 300); // 5 min TTL
 
+      // Create explicit user consent log
+      await tx.userConsent.create({
+        data: {
+          userId: user.id,
+          consentGiven: details.consentGiven === true || details.consentGiven === 'true',
+          consentVersion: details.consentVersion || '1.0.0',
+          privacyPolicyVersion: details.privacyPolicyVersion || '1.0.0',
+          termsVersion: details.termsVersion || '1.0.0',
+          ipAddress: ipAddress || null,
+        },
+      });
+
       // Create Audit Log
       await tx.auditLog.create({
         data: {
@@ -114,6 +127,8 @@ export class AuthService {
 
       return { user, otp };
     });
+
+    logger.info(`[AUDIT] Action: USER_REGISTER | User: ${result.user.id} | Role: ${role.name}`);
 
     return result;
   }
@@ -166,6 +181,7 @@ export class AuthService {
       });
 
       metricsService.recordLoginSuccess();
+      logger.info(`[AUDIT] Action: USER_LOGIN | User: ${user.id} | Email: ${user.email}`);
       return { accessToken, refreshToken: refreshTokenString, user };
     } catch (error) {
       metricsService.recordLoginFailure();
@@ -193,6 +209,8 @@ export class AuthService {
           },
         });
       });
+
+      logger.info(`[AUDIT] Action: USER_LOGOUT | User: ${record.userId}`);
     }
   }
 
@@ -304,6 +322,8 @@ export class AuthService {
               ipAddress: ipAddress || null,
             },
           });
+
+          logger.info(`[AUDIT] Action: EMAIL_VERIFIED | User: ${user.id}`);
         }
       }
       metricsService.recordOTPVerification(true);
@@ -365,6 +385,8 @@ export class AuthService {
         },
       });
     });
+
+    logger.info(`[AUDIT] Action: PASSWORD_RESET | User: ${userId}`);
   }
 }
 export const authService = new AuthService();

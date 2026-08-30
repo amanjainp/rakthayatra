@@ -30,5 +30,6 @@ export const useMapsLocations = (center: { latitude: number; longitude: number }
         return [] as MapMarker[];
       }
     },
+    refetchInterval: 30000, // Background refresh every 30 seconds to sync map markers
   });
 };

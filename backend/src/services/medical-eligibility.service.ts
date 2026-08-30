@@ -3,6 +3,8 @@ import { MedicalEligibilityRepository } from '../repositories/medical-eligibilit
 import { DonorRepository } from '../repositories/donor.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
+import { encryptData, decryptData } from '../utils/encryption';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
@@ -111,16 +113,17 @@ export class MedicalEligibilityService {
       }
 
       // 3. Upsert MedicalEligibility record
+      const encryptedAnswers = encryptData(JSON.stringify(answers));
       const record = await tx.medicalEligibility.upsert({
         where: { donorProfileId },
         update: {
-          answers: JSON.stringify(answers),
+          answers: encryptedAnswers as any,
           isEligible,
           nextEligibleDate,
         },
         create: {
           donorProfileId,
-          answers: JSON.stringify(answers),
+          answers: encryptedAnswers as any,
           isEligible,
           nextEligibleDate,
         },
@@ -131,21 +134,35 @@ export class MedicalEligibilityService {
         isAvailable: isEligible,
       });
 
-      // 5. Write audit log history tracking
+      // 5. Write audit log history tracking (omits plaintext answers for compliance)
       await auditLogRepo.create({
         user: userId ? { connect: { id: userId } } : undefined,
         action: 'SUBMIT_MEDICAL_QUESTIONNAIRE',
         details: {
           donorProfileId,
-          answers,
+          answersMasked: true,
           isEligible,
           nextEligibleDate,
           reasons,
         } as any,
       });
 
+      logger.info(`[AUDIT] Action: SUBMIT_MEDICAL_QUESTIONNAIRE | User: ${userId || 'System'} | Details: ${JSON.stringify({ donorProfileId, isEligible, reasons })}`);
+
       return record;
     });
+
+    if (evaluated && evaluated.answers) {
+      try {
+        const decryptedStr = decryptData(evaluated.answers);
+        evaluated.answers = JSON.parse(decryptedStr);
+      } catch (err: any) {
+        logger.error(`Failed to decrypt answers during submission: ${err.message}`);
+        if (typeof evaluated.answers === 'string') {
+          evaluated.answers = JSON.parse(evaluated.answers);
+        }
+      }
+    }
 
     return evaluated;
   }
@@ -155,7 +172,20 @@ export class MedicalEligibilityService {
    */
   async getDonorEligibility(donorProfileId: string): Promise<MedicalEligibility | null> {
     const eligibilityRepo = new MedicalEligibilityRepository(prisma);
-    return eligibilityRepo.findByDonorId(donorProfileId);
+    const record = await eligibilityRepo.findByDonorId(donorProfileId);
+    
+    if (record && record.answers) {
+      try {
+        const decryptedStr = decryptData(record.answers);
+        record.answers = JSON.parse(decryptedStr);
+      } catch (err: any) {
+        logger.error(`Failed to decrypt medical eligibility answers on fetch: ${err.message}`);
+        if (typeof record.answers === 'string') {
+          record.answers = JSON.parse(record.answers);
+        }
+      }
+    }
+    return record;
   }
 
   /**
@@ -174,12 +204,15 @@ export class MedicalEligibilityService {
       include: { user: true },
     });
 
-    return logs.map((log) => ({
-      id: log.id,
-      evaluatedBy: log.user ? log.user.email : 'System/Self',
-      createdAt: log.createdAt,
-      details: typeof log.details === 'string' ? JSON.parse(log.details) : log.details,
-    }));
+    return logs.map((log) => {
+      let details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+      return {
+        id: log.id,
+        evaluatedBy: log.user ? log.user.email : 'System/Self',
+        createdAt: log.createdAt,
+        details,
+      };
+    });
   }
 }
 

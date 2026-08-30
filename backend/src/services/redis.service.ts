@@ -13,6 +13,9 @@ export class RedisService {
     const redisUrl = env.REDIS_URL || '';
 
     if (!redisUrl) {
+      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+        throw new Error('REDIS_URL must be configured in production/staging environments. Mock fallback is disabled.');
+      }
       logger.warn('REDIS_URL not configured. RedisService is running in MOCK mode.');
       this.isMockMode = true;
     } else {
@@ -34,6 +37,9 @@ export class RedisService {
           logger.error(`Redis connection failure: ${err.message}`);
         });
       } catch (error: any) {
+        if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+          throw new Error(`Failed to construct Redis Client in production/staging: ${error.message}`);
+        }
         logger.error(`Failed to construct Redis Client instance: ${error.message}`);
         this.isMockMode = true;
       }

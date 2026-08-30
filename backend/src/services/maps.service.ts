@@ -18,6 +18,9 @@ export class MapsService {
     this.apiKey = env.GOOGLE_MAPS_API_KEY || '';
 
     if (!this.apiKey) {
+      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+        throw new Error('GOOGLE_MAPS_API_KEY must be configured in production/staging environments. Mock fallback is disabled.');
+      }
       logger.warn('GOOGLE_MAPS_API_KEY not configured. MapsService is running in MOCK mode.');
       this.isMockMode = true;
     } else {

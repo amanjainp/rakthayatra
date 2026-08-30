@@ -93,6 +93,7 @@ model User {
   notifications    Notification[]
   bloodRequests    BloodRequest[]    @relation("UserRequests")
   deviceTokens     DeviceToken[]
+  userConsent      UserConsent?
 
   @@index([email])
 }
@@ -301,4 +302,19 @@ model DeviceToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model UserConsent {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentGiven          Boolean  @default(false)
+  consentTimestamp      DateTime @default(now())
+  consentVersion        String
+  privacyPolicyVersion  String
+  termsVersion          String
+  ipAddress             String?
+  registrationTimestamp DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }

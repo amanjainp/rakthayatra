@@ -20,6 +20,9 @@ export class S3Service {
     this.bucketName = env.AWS_S3_BUCKET || 'lifelink-storage-bucket';
 
     if (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY || !env.AWS_REGION) {
+      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+        throw new Error('AWS S3 parameters must be configured in production/staging environments. Mock fallback is disabled.');
+      }
       logger.warn('AWS S3 credentials or bucket name not configured in env. S3Service is running in MOCK mode.');
       this.isMockMode = true;
     } else {
