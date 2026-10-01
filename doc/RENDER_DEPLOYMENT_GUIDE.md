@@ -96,7 +96,7 @@ If you prefer to configure each service manually in the Render UI:
    * **Runtime**: `Node`
    * **Build Command**:
      ```bash
-     npm install && npx prisma generate && npx prisma migrate deploy && npx ts-node prisma/seed-prod.ts && npm run build
+     npm install && npx prisma generate && (npx prisma migrate resolve --rolled-back 20260830174200_init || true) && npx prisma migrate deploy && npx ts-node prisma/seed-prod.ts && npm run build
      ```
    * **Start Command**:
      ```bash

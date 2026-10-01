@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed-prod.ts",
-    "render-build": "prisma generate && prisma migrate deploy && ts-node prisma/seed-prod.ts && tsc",
+    "render-build": "prisma generate && (prisma migrate resolve --rolled-back 20260830174200_init || true) && prisma migrate deploy && ts-node prisma/seed-prod.ts && tsc",
     "test": "jest --passWithNoTests",
     "lint": "eslint src/**/*.ts"
   },
