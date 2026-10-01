@@ -66,8 +66,34 @@ app.use('/api/requests', bloodRequestRoutes);
 app.use('/api/eligibility', medicalEligibilityRoutes);
 app.use('/api/camps', donationCampRoutes);
 
-// Health Check API
+// Root API Welcome / Status probe
+const rootStatusHandler = (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: 'Rakthayatra (LifeLink) Backend API is running successfully.',
+    status: 'UP',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      healthLive: '/health/live',
+      healthReady: '/health/ready',
+      metrics: '/metrics',
+      auth: '/api/auth',
+      inventory: '/api/inventory',
+      donations: '/api/donations',
+      requests: '/api/requests',
+      eligibility: '/api/eligibility',
+      camps: '/api/camps',
+    },
+  });
+};
+
+app.get('/', rootStatusHandler);
+app.get('/api', rootStatusHandler);
+
+// Health Check API (available at /health and /api/health)
 app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // Metrics Endpoint Route
 app.use('/metrics', metricsRoutes);
