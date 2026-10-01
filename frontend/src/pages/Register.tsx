@@ -67,7 +67,15 @@ export const Register: React.FC = () => {
       toast.success('Registration successful! Please log in.');
       navigate('/login');
     } catch (err: any) {
-      const errMsg = err.response?.data?.error?.message || 'Registration failed. Please try again.';
+      const errMsg =
+        err.response?.data?.error?.message ||
+        (err.response?.data?.error?.details && Array.isArray(err.response.data.error.details)
+          ? err.response.data.error.details.map((d: any) => d.message).join(', ')
+          : null) ||
+        (err.message === 'Network Error'
+          ? 'Unable to reach API server. Please check connection or verify backend is online.'
+          : err.message) ||
+        'Registration failed. Please try again.';
       toast.error(errMsg);
     } finally {
       setIsSubmitting(false);

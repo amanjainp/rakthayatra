@@ -53,7 +53,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: rakthayatra-backend
-          property: host
+        value: https://rakthayatra-backend.onrender.com
