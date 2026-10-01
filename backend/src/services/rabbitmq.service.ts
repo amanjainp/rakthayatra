@@ -31,7 +31,7 @@ export class RabbitMQService {
     const amqpUrl = env.RABBITMQ_URL || '';
 
     if (!amqpUrl) {
-      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+      if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('RABBITMQ_URL must be configured in production/staging environments. Mock fallback is disabled.');
       }
       logger.warn('RABBITMQ_URL not configured. RabbitMQService is running in MOCK mode.');
@@ -73,8 +73,8 @@ export class RabbitMQService {
 
       logger.info('RabbitMQ connection pool and exchanges created successfully.');
     } catch (error: any) {
-      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
-        throw new Error(`Failed to initialize RabbitMQ connection in production/staging: ${error.message}`);
+      if (process.env.STRICT_ENV_VALIDATION === 'true') {
+        throw new Error(`Failed to initialize RabbitMQ connection: ${error.message}`);
       }
       logger.error(`RabbitMQ live broker initialization failed: ${error.message}. Reverting to MOCK mode.`);
       this.isMockMode = true;

@@ -34,7 +34,7 @@ export class FirebaseService {
   constructor() {
     // Validate firebase configs
     if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
-      if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
+      if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('Firebase parameters must be configured in production/staging environments. Mock fallback is disabled.');
       }
       logger.warn('Firebase parameters not configured in env. FirebaseService is running in MOCK mode.');
@@ -50,8 +50,8 @@ export class FirebaseService {
         });
         logger.info('Firebase Admin Client successfully initialized.');
       } catch (error: any) {
-        if (env.NODE_ENV === 'production' || env.NODE_ENV === 'staging') {
-          throw new Error(`Failed to initialize Firebase Admin Client in production/staging: ${error.message}`);
+        if (process.env.STRICT_ENV_VALIDATION === 'true') {
+          throw new Error(`Failed to initialize Firebase Admin Client: ${error.message}`);
         }
         logger.error(`Failed to initialize Firebase Admin Client: ${error.message}`);
         this.isMockMode = true;

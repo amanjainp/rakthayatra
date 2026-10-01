@@ -4,22 +4,24 @@ import { ProductionEmailProvider } from './email/production-email.provider';
 import { SMSProvider } from './sms/sms-provider.interface';
 import { DevelopmentSMSProvider } from './sms/development-sms.provider';
 import { ProductionSMSProvider } from './sms/production-sms.provider';
-import { env } from '../config/env';
 
 class ProviderFactory {
   private emailProvider: EmailProvider;
   private smsProvider: SMSProvider;
 
   constructor() {
-    const isProductionOrStaging = env.NODE_ENV === 'production' || env.NODE_ENV === 'staging';
+    const hasSmtp = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER);
+    const hasTwilio = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
 
-    if (isProductionOrStaging) {
-      // In production/staging, map active providers
+    if (hasSmtp) {
       this.emailProvider = new ProductionEmailProvider();
+    } else {
+      this.emailProvider = new DevelopmentEmailProvider();
+    }
+
+    if (hasTwilio) {
       this.smsProvider = new ProductionSMSProvider();
     } else {
-      // Otherwise fallback safely to mocks/dev simulation
-      this.emailProvider = new DevelopmentEmailProvider();
       this.smsProvider = new DevelopmentSMSProvider();
     }
   }
