@@ -34,7 +34,7 @@ export class RabbitMQService {
       if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('RABBITMQ_URL must be configured in production/staging environments. Mock fallback is disabled.');
       }
-      logger.warn('RABBITMQ_URL not configured. RabbitMQService is running in MOCK mode.');
+      logger.info('RABBITMQ_URL not configured. RabbitMQService is running in mock mode.');
       this.isMockMode = true;
     } else {
       this.initializeLiveConnection(amqpUrl);

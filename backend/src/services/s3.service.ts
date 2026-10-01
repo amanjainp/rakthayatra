@@ -23,7 +23,7 @@ export class S3Service {
       if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('AWS S3 parameters must be configured in production/staging environments. Mock fallback is disabled.');
       }
-      logger.warn('AWS S3 credentials or bucket name not configured in env. S3Service is running in MOCK mode.');
+      logger.info('AWS S3 credentials or bucket name not configured in env. S3Service is running in mock mode.');
       this.isMockMode = true;
     } else {
       this.s3Client = new S3Client({

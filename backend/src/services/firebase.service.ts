@@ -37,7 +37,7 @@ export class FirebaseService {
       if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('Firebase parameters must be configured in production/staging environments. Mock fallback is disabled.');
       }
-      logger.warn('Firebase parameters not configured in env. FirebaseService is running in MOCK mode.');
+      logger.info('Firebase parameters not configured in env. FirebaseService is running in mock mode.');
       this.isMockMode = true;
     } else {
       try {

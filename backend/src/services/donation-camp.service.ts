@@ -3,12 +3,11 @@ import { DonationCampRepository } from '../repositories/donation-camp.repository
 import { DonorRepository } from '../repositories/donor.repository';
 import { HospitalRepository } from '../repositories/hospital.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
-import { RedisService } from './redis.service';
+import { redisService } from './redis.service';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
 import { metricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
-const redisService = new RedisService();
 
 export interface VolunteerInput {
   name: string;

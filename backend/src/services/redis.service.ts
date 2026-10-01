@@ -16,7 +16,7 @@ export class RedisService {
       if (process.env.STRICT_ENV_VALIDATION === 'true') {
         throw new Error('REDIS_URL must be configured in production/staging environments. Mock fallback is disabled.');
       }
-      logger.warn('REDIS_URL not configured. RedisService is running in MOCK mode.');
+      logger.info('REDIS_URL not configured. RedisService is running in mock mode.');
       this.isMockMode = true;
     } else {
       try {
