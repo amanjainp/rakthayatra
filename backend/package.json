@@ -9,8 +9,8 @@
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:seed": "ts-node prisma/seed-prod.ts",
-    "render-build": "prisma generate && (prisma migrate resolve --rolled-back 20260830174200_init || true) && prisma migrate deploy && ts-node prisma/seed-prod.ts && tsc",
+    "prisma:seed": "node prisma/seed-prod.js",
+    "render-build": "prisma generate && prisma db push --skip-generate && node prisma/seed-prod.js && tsc",
     "test": "jest --passWithNoTests",
     "lint": "eslint src/**/*.ts"
   },
