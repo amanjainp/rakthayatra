@@ -96,7 +96,7 @@ If you prefer to configure each service manually in the Render UI:
    * **Runtime**: `Node`
    * **Build Command**:
      ```bash
-     npm install && npx prisma generate && npx prisma db push --skip-generate && node prisma/seed-prod.js && npm run build
+     npm install --include=dev && npx prisma generate && npx prisma db push --skip-generate && node prisma/seed-prod.js && npm run build
      ```
    * **Start Command**:
      ```bash
