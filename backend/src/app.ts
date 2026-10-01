@@ -13,6 +13,7 @@ import donationCampRoutes from './routes/donation-camp.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
+import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
 
@@ -23,7 +24,7 @@ app.use(loggingMiddleware);
 app.use(metricsMiddleware);
 
 // Security Middlewares
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'];
 app.use(
   cors({
@@ -67,8 +68,14 @@ app.use('/api/eligibility', medicalEligibilityRoutes);
 app.use('/api/camps', donationCampRoutes);
 
 // Root API Welcome / Status probe
-const rootStatusHandler = (_req: Request, res: Response) => {
-  res.status(200).json({
+const rootStatusHandler = (req: Request, res: Response) => {
+  // If request comes from a browser, render rich interactive landing hub
+  if (req.accepts('html') && req.query.json !== 'true') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(renderApiLandingPage());
+  }
+
+  return res.status(200).json({
     success: true,
     message: 'Rakthayatra (LifeLink) Backend API is running successfully.',
     status: 'UP',
