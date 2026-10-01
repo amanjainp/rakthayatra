@@ -40,9 +40,9 @@ services:
   # ---------------------------------------------------------------------------
   # Frontend Static Site
   # ---------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: rakthayatra-frontend
-    plan: free
+    runtime: static
     region: oregon
     rootDir: frontend
     buildCommand: npm install && npm run build
