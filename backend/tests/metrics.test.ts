@@ -1,6 +1,10 @@
 import request from 'supertest';
 import app from '../src/app';
 import { metricsService } from '../src/services/metrics.service';
+import { generateAccessToken } from '../src/utils/crypto';
+
+// Generate a synthetic ADMIN token for this test suite (no DB required)
+const adminToken = generateAccessToken({ userId: 'test-admin-id', role: 'ADMIN' });
 
 describe('Observability Metrics Module Tests', () => {
   beforeEach(async () => {
@@ -10,7 +14,9 @@ describe('Observability Metrics Module Tests', () => {
 
   describe('GET /metrics Endpoint', () => {
     it('should retrieve Prometheus format metrics successfully', async () => {
-      const response = await request(app).get('/metrics');
+      const response = await request(app)
+        .get('/metrics')
+        .set('Authorization', `Bearer ${adminToken}`);
       
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('text/plain');
@@ -18,6 +24,7 @@ describe('Observability Metrics Module Tests', () => {
       expect(response.text).toContain('lifelink_node_process_cpu_user_seconds_total');
     });
   });
+
 
   describe('MetricsService Unit Actions', () => {
     it('should increment active requests counter correctly', async () => {

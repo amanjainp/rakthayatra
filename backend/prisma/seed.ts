@@ -151,6 +151,17 @@ async function main() {
     },
   });
 
+  console.log('Seeding sample patient...');
+  const patientPasswordHash = await bcrypt.hash('Patient@1234', salt);
+  await prisma.user.create({
+    data: {
+      email: 'patient@lifelink.org',
+      passwordHash: patientPasswordHash,
+      roleId: patientRole.id,
+      status: UserStatus.ACTIVE,
+    },
+  });
+
   const donorProfile1 = await prisma.donorProfile.create({
     data: {
       userId: donorUser1.id,

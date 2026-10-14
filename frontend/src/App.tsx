@@ -99,7 +99,7 @@ function App() {
                 <Route
                   path="/inventory"
                   element={
-                    <RoleProtectedRoute allowedRoles={['BLOOD_BANK', 'ADMIN']}>
+                    <RoleProtectedRoute allowedRoles={['BLOOD_BANK', 'ADMIN', 'HOSPITAL']}>
                       <Inventory />
                     </RoleProtectedRoute>
                   }

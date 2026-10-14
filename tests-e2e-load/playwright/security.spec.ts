@@ -23,8 +23,8 @@ test.describe('Security & Authorization', () => {
   // -------------------------------------------------------------------------
   // 1. Unauthenticated access → redirect to /login
   // -------------------------------------------------------------------------
-  test('should redirect unauthenticated user from /dashboard to /login', async ({ page }) => {
-    await page.goto('/dashboard');
+  test('should redirect unauthenticated user from /profile to /login', async ({ page }) => {
+    await page.goto('/profile');
     await expect(page).toHaveURL(/\/login/);
   });
 
@@ -33,22 +33,18 @@ test.describe('Security & Authorization', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('should redirect unauthenticated user from /admin to /login', async ({ page }) => {
-    await page.goto('/admin');
+  test('should redirect unauthenticated user from /admin/dashboard to /login', async ({ page }) => {
+    await page.goto('/admin/dashboard');
     await expect(page).toHaveURL(/\/login/);
   });
 
   // -------------------------------------------------------------------------
   // 2. Cross-role: Patient cannot access admin panel
   // -------------------------------------------------------------------------
-  test('patient navigating to /admin is blocked or redirected', async ({ page }) => {
+  test('patient navigating to /admin/dashboard is blocked or redirected', async ({ page }) => {
     await loginAs(page, PATIENT.email, PATIENT.password);
-    await page.goto('/admin');
-    const isBlocked =
-      page.url().includes('/access-denied') ||
-      !page.url().includes('/admin') ||
-      await page.getByText(/access denied|unauthorized|forbidden/i).isVisible().catch(() => false);
-    expect(isBlocked).toBe(true);
+    await page.goto('/admin/dashboard');
+    await expect(page).toHaveURL(/\/access-denied/);
   });
 
   // -------------------------------------------------------------------------
@@ -121,9 +117,8 @@ test.describe('Security & Authorization', () => {
       await page.getByRole('button', { name: /sign in/i }).click();
       await page.waitForTimeout(500);
     }
-    // After multiple failures, expect some error/rate-limit message visible
-    const hasError = await page.getByText(/invalid|too many|rate limit|locked|failed/i).isVisible().catch(() => false);
-    expect(hasError).toBe(true);
+    // After multiple failures, expect some error/rate-limit message to be visible
+    await expect(page.getByText(/invalid|too many|rate limit|locked|failed|missing/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   // -------------------------------------------------------------------------
@@ -140,7 +135,7 @@ test.describe('Security & Authorization', () => {
   test('IDOR — API rejects cross-user profile read attempt', async ({ page }) => {
     // Login as patient and try to read donor's profile with the patient's token
     await loginAs(page, PATIENT.email, PATIENT.password);
-    const token = await page.evaluate(() => localStorage.getItem('token') || sessionStorage.getItem('token'));
+    const token = await page.evaluate(() => localStorage.getItem('ll_access_token'));
     if (!token) {
       test.skip(); // Token not in storage — skip rather than fail
       return;

@@ -5,10 +5,14 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
+// In development, relax rate limits so E2E test suites (Playwright) running
+// against localhost don't get locked out. Production retains strict limits.
+const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'staging';
+
 // Endpoint-specific Rate Limiters
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
-  max: 5, // Limit 5 logins per window per IP
+  windowMs: 15 * 60 * 1000,          // 15 minutes
+  max: isDev ? 100 : 5,              // PROD: 5 | DEV: 100
   message: {
     success: false,
     error: {
@@ -19,8 +23,8 @@ const loginLimiter = rateLimit({
 });
 
 const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit 3 accounts per hour per IP
+  windowMs: 60 * 60 * 1000,          // 1 hour
+  max: isDev ? 50 : 3,               // PROD: 3 | DEV: 50
   message: {
     success: false,
     error: {
@@ -32,7 +36,7 @@ const registerLimiter = rateLimit({
 
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: isDev ? 50 : 10,              // PROD: 10 | DEV: 50
   message: {
     success: false,
     error: {
@@ -44,15 +48,16 @@ const otpLimiter = rateLimit({
 
 const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: isDev ? 50 : 5,              // PROD: 5 | DEV: 50
   message: {
     success: false,
     error: {
       code: 'TOO_MANY_PASSWORD_RESETS',
-      message: 'Too many password reset attempts. Please try again after 15 minutes.',
+      message: 'Too many password reset attempts. Please try again later.',
     },
   },
 });
+
 
 // Authentication Routes
 router.post('/register', registerLimiter, authController.register);

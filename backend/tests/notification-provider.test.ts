@@ -133,7 +133,7 @@ describe('Production Notification System Integration Tests', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-    });
+    }, 15_000); // Extended: real TCP connect attempt to localhost:587 takes ~5-6s to ECONNREFUSED
   });
 
   describe('Worker Retries and DLQ Routing Execution Flow', () => {

@@ -1,10 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { metricsService } from '../services/metrics.service';
+import { authenticate, requireRoles } from '../middlewares/auth.middleware';
 import logger from '../config/logger';
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response) => {
+// Prometheus metrics endpoint — ADMIN only.
+// Unauthenticated access would expose internal counters, queue depths,
+// and latency histograms to any caller. This is a P0 security control.
+router.get('/', authenticate, requireRoles(['ADMIN']), async (_req: Request, res: Response) => {
   try {
     const metricsContent = await metricsService.getMetrics();
     res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
