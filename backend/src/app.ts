@@ -13,6 +13,7 @@ import donationCampRoutes from './routes/donation-camp.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
+import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
 
@@ -23,13 +24,18 @@ app.use(loggingMiddleware);
 app.use(metricsMiddleware);
 
 // Security Middlewares
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'];
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        allowedOrigins.includes('*') ||
+        origin.endsWith('.onrender.com') ||
+        origin.includes('localhost')
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -66,8 +72,40 @@ app.use('/api/requests', bloodRequestRoutes);
 app.use('/api/eligibility', medicalEligibilityRoutes);
 app.use('/api/camps', donationCampRoutes);
 
-// Health Check API
+// Root API Welcome / Status probe
+const rootStatusHandler = (req: Request, res: Response) => {
+  // If request comes from a browser, render rich interactive landing hub
+  if (req.accepts('html') && req.query.json !== 'true') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(renderApiLandingPage());
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Rakthayatra (LifeLink) Backend API is running successfully.',
+    status: 'UP',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      healthLive: '/health/live',
+      healthReady: '/health/ready',
+      metrics: '/metrics',
+      auth: '/api/auth',
+      inventory: '/api/inventory',
+      donations: '/api/donations',
+      requests: '/api/requests',
+      eligibility: '/api/eligibility',
+      camps: '/api/camps',
+    },
+  });
+};
+
+app.get('/', rootStatusHandler);
+app.get('/api', rootStatusHandler);
+
+// Health Check API (available at /health and /api/health)
 app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // Metrics Endpoint Route
 app.use('/metrics', metricsRoutes);

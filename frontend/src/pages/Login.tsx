@@ -34,7 +34,12 @@ export const Login: React.FC = () => {
       const role = response.data.user.role;
       navigate(ROLE_DASHBOARDS[role] || '/', { replace: true });
     } catch (err: any) {
-      const errMsg = err.response?.data?.error?.message || 'Login failed. Invalid email or password.';
+      const errMsg =
+        err.response?.data?.error?.message ||
+        (err.message === 'Network Error'
+          ? 'Unable to reach API server. Please check connection or verify backend is online.'
+          : err.message) ||
+        'Login failed. Invalid email or password.';
       toast.error(errMsg);
     } finally {
       setIsSubmitting(false);

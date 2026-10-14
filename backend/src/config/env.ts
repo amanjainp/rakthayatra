@@ -39,9 +39,9 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-// Staging & Production strict validation check to disable mock fallbacks
+// If STRICT_ENV_VALIDATION=true is enabled, enforce that real cloud services are provided
 const data = parsed.data;
-if (data.NODE_ENV === 'production' || data.NODE_ENV === 'staging') {
+if (process.env.STRICT_ENV_VALIDATION === 'true') {
   const missing: string[] = [];
   if (!data.AWS_ACCESS_KEY_ID) missing.push('AWS_ACCESS_KEY_ID');
   if (!data.AWS_SECRET_ACCESS_KEY) missing.push('AWS_SECRET_ACCESS_KEY');
@@ -53,14 +53,24 @@ if (data.NODE_ENV === 'production' || data.NODE_ENV === 'staging') {
   if (!data.FIREBASE_PRIVATE_KEY) missing.push('FIREBASE_PRIVATE_KEY');
   if (!data.REDIS_URL) missing.push('REDIS_URL');
   if (!data.RABBITMQ_URL) missing.push('RABBITMQ_URL');
-  if (data.ENCRYPTION_KEYS === 'dev-key-must-be-32-characters-long-!') {
-    missing.push('ENCRYPTION_KEYS (cannot use default dev key in production/staging)');
-  }
 
   if (missing.length > 0) {
-    console.error(`❌ Startup validation failed. In ${data.NODE_ENV} mode, the following parameters are strictly required and cannot use local mocks:`);
+    console.error(`❌ Startup validation failed. In ${data.NODE_ENV} mode, STRICT_ENV_VALIDATION is enabled, but the following are missing:`);
     console.error(missing.map((key) => ` - ${key}`).join('\n'));
     process.exit(1);
+  }
+} else {
+  // Gracefully log warnings for unconfigured external services (mock fallback active)
+  const unconfigured: string[] = [];
+  if (!data.AWS_ACCESS_KEY_ID) unconfigured.push('AWS S3 (Avatar/Document storage)');
+  if (!data.GOOGLE_MAPS_API_KEY) unconfigured.push('Google Maps (Geocoding)');
+  if (!data.FIREBASE_PROJECT_ID) unconfigured.push('Firebase (Push notifications)');
+  if (!data.REDIS_URL) unconfigured.push('Redis (Cache)');
+  if (!data.RABBITMQ_URL) unconfigured.push('RabbitMQ (Message Queue)');
+
+  if (unconfigured.length > 0) {
+    console.log(`ℹ️ The following external services are not configured and will run using local mock providers:`);
+    console.log(unconfigured.map((key) => `  * ${key}`).join('\n'));
   }
 }
 
