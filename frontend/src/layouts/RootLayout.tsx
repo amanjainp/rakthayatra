@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { LifeLinkChatbot } from '../components/chatbot/LifeLinkChatbot';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ export const RootLayout: React.FC = () => {
         <ThemeProvider>
           <AuthProvider>
             <Outlet />
+            <LifeLinkChatbot />
             <Toaster
               position="top-right"
               toastOptions={{

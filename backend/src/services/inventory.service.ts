@@ -399,6 +399,92 @@ export class InventoryService {
   }
 
   /**
+   * Retrieves an aggregated summary of available blood stock for public discovery without leaking private medical or donor details.
+   */
+  async getPublicSummary(params?: { city?: string; bloodGroup?: BloodGroup }) {
+    const now = new Date();
+    const where: any = {
+      status: 'AVAILABLE',
+      expiryDate: { gt: now },
+    };
+    if (params?.bloodGroup) {
+      where.bloodGroup = params.bloodGroup;
+    }
+    if (params?.city) {
+      where.bloodBank = { city: { contains: params.city, mode: 'insensitive' } };
+    }
+
+    const availableItems = await prisma.bloodInventory.findMany({
+      where,
+      include: {
+        bloodBank: {
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            address: true,
+            phone: true,
+            latitude: true,
+            longitude: true,
+            isVerified: true,
+          },
+        },
+      },
+      orderBy: { expiryDate: 'asc' },
+    });
+
+    const summaryByGroup: Record<string, number> = {
+      A_POS: 0,
+      A_NEG: 0,
+      B_POS: 0,
+      B_NEG: 0,
+      AB_POS: 0,
+      AB_NEG: 0,
+      O_POS: 0,
+      O_NEG: 0,
+    };
+
+    let totalAvailableUnits = 0;
+    for (const item of availableItems) {
+      summaryByGroup[item.bloodGroup] = (summaryByGroup[item.bloodGroup] || 0) + item.unitsCount;
+      totalAvailableUnits += item.unitsCount;
+    }
+
+    const bloodBanksMap = new Map<string, any>();
+    for (const item of availableItems) {
+      const bankId = item.bloodBank.id;
+      if (!bloodBanksMap.has(bankId)) {
+        bloodBanksMap.set(bankId, {
+          id: bankId,
+          name: item.bloodBank.name,
+          city: item.bloodBank.city,
+          address: item.bloodBank.address,
+          phone: item.bloodBank.phone,
+          latitude: item.bloodBank.latitude,
+          longitude: item.bloodBank.longitude,
+          isVerified: item.bloodBank.isVerified,
+          availableUnitsCount: 0,
+          groups: {} as Record<string, number>,
+          lastUpdated: item.updatedAt,
+        });
+      }
+      const entry = bloodBanksMap.get(bankId);
+      entry.availableUnitsCount += item.unitsCount;
+      entry.groups[item.bloodGroup] = (entry.groups[item.bloodGroup] || 0) + item.unitsCount;
+      if (new Date(item.updatedAt) > new Date(entry.lastUpdated)) {
+        entry.lastUpdated = item.updatedAt;
+      }
+    }
+
+    return {
+      totalAvailableUnits,
+      summaryByGroup,
+      participatingBloodBanks: Array.from(bloodBanksMap.values()),
+      lastUpdated: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Helper to invalidate caches.
    */
   private async invalidateCache(bloodBankId: string) {

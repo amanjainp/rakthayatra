@@ -189,6 +189,23 @@ export class InventoryController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * Public summary of available blood units by blood group & participating facilities.
+   */
+  async getPublicSummary(req: Request, res: Response) {
+    try {
+      const city = req.query.city as string | undefined;
+      const bloodGroup = req.query.bloodGroup as any;
+      const data = await inventoryService.getPublicSummary({ city, bloodGroup });
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const inventoryController = new InventoryController();

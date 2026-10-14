@@ -39,6 +39,11 @@ router.get('/:id/stats', authenticate, (req, res) =>
   donationCampController.getStats(req, res)
 );
 
+// Public camp listing for public homepage without requiring authentication
+router.get('/public', (req, res) =>
+  donationCampController.list(req, res)
+);
+
 // 8. Query/search camps list (Authenticated users)
 router.get('/', authenticate, (req, res) =>
   donationCampController.list(req, res)

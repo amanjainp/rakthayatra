@@ -4,6 +4,9 @@ import { authenticate, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
+// Public blood availability summary for homepage and search
+router.get('/public-summary', (req, res) => inventoryController.getPublicSummary(req, res));
+
 // 1. Search blood stocks (Authenticated users)
 router.get('/', authenticate, (req, res) => inventoryController.search(req, res));
 
