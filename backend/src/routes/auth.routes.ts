@@ -12,7 +12,10 @@ const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 
 // Endpoint-specific Rate Limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,          // 15 minutes
-  max: isDev ? 100 : 5,              // PROD: 5 | DEV: 100
+  max: isDev ? 100 : 30,             // PROD: 30 | DEV: 100
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {
@@ -24,7 +27,10 @@ const loginLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,          // 1 hour
-  max: isDev ? 50 : 3,               // PROD: 3 | DEV: 50
+  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {
@@ -36,7 +42,10 @@ const registerLimiter = rateLimit({
 
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 50 : 10,              // PROD: 10 | DEV: 50
+  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {
@@ -48,7 +57,10 @@ const otpLimiter = rateLimit({
 
 const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 50 : 5,              // PROD: 5 | DEV: 50
+  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {

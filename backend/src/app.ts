@@ -19,6 +19,9 @@ import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
 
+// Trust reverse proxy (Render, Cloudflare, etc.) so req.ip and rate limiters work properly
+app.set('trust proxy', 1);
+
 // Apply Logging context middleware first to set request/correlation IDs
 app.use(loggingMiddleware);
 
@@ -57,6 +60,7 @@ const globalLimiter = rateLimit({
   max: 10000, // Increased limit for development/testing to avoid lockouts
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {
@@ -141,7 +145,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     success: false,
     error: {
       code: 'INTERNAL_SERVER_ERROR',
-      message: 'An unexpected database or server error occurred.',
+      message: err?.message || 'An unexpected database or server error occurred.',
     },
   });
 });

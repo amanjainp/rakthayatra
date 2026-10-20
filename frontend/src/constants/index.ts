@@ -4,7 +4,7 @@ export const ACCESS_TOKEN_KEY = 'll_access_token';
 export const REFRESH_TOKEN_KEY = 'll_refresh_token';
 export const USER_KEY = 'll_user';
 
-let rawBaseUrl = 'http://localhost:5000/api';
+let rawBaseUrl = 'https://rakthayatra-backend.onrender.com/api';
 try {
   const getMetaEnv = new Function('try { return import.meta.env; } catch { return undefined; }');
   const env = getMetaEnv();
@@ -26,7 +26,9 @@ const normalizeApiUrl = (url: string): string => {
   if (typeof window !== 'undefined' && window?.location?.hostname && window.location.hostname.includes('.onrender.com')) {
     const stripped = trimmed.replace(/^https?:\/\//i, '');
     if (!stripped.includes('.') || stripped.includes('localhost') || !trimmed) {
-      const backendHostname = window.location.hostname.replace('-frontend', '-backend');
+      const backendHostname = window.location.hostname.includes('-frontend')
+        ? window.location.hostname.replace('-frontend', '-backend')
+        : 'rakthayatra-backend.onrender.com';
       trimmed = `https://${backendHostname}`;
     }
   }
