@@ -4,18 +4,21 @@ export const ACCESS_TOKEN_KEY = 'll_access_token';
 export const REFRESH_TOKEN_KEY = 'll_refresh_token';
 export const USER_KEY = 'll_user';
 
-let rawBaseUrl = 'https://rakthayatra-backend.onrender.com/api';
+let rawBaseUrl = 'http://localhost:5000/api';
 try {
-  const getMetaEnv = new Function('try { return import.meta.env; } catch { return undefined; }');
-  const env = getMetaEnv();
-  if (env && env.VITE_API_URL) {
-    rawBaseUrl = env.VITE_API_URL;
+  if (typeof (import.meta as any) !== 'undefined' && (import.meta as any).env?.VITE_API_URL) {
+    rawBaseUrl = (import.meta as any).env.VITE_API_URL;
+  } else {
+    const envGetter = new Function('return import.meta.env');
+    const env = envGetter();
+    if (env && env.VITE_API_URL) {
+      rawBaseUrl = env.VITE_API_URL;
+    }
   }
 } catch {
-  // fallback for non-browser/non-ESM runtimes
-}
-if (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) {
-  rawBaseUrl = process.env.VITE_API_URL;
+  if (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) {
+    rawBaseUrl = process.env.VITE_API_URL;
+  }
 }
 
 // Normalize API Base URL (handle missing https:// protocol, internal Render hostnames, and /api prefix gracefully)
@@ -23,12 +26,10 @@ const normalizeApiUrl = (url: string): string => {
   let trimmed = url ? url.trim().replace(/\/+$/, '') : '';
 
   // 1. If running in a browser on Render (*.onrender.com)
-  if (typeof window !== 'undefined' && window?.location?.hostname && window.location.hostname.includes('.onrender.com')) {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('.onrender.com')) {
     const stripped = trimmed.replace(/^https?:\/\//i, '');
     if (!stripped.includes('.') || stripped.includes('localhost') || !trimmed) {
-      const backendHostname = window.location.hostname.includes('-frontend')
-        ? window.location.hostname.replace('-frontend', '-backend')
-        : 'rakthayatra-backend.onrender.com';
+      const backendHostname = window.location.hostname.replace('-frontend', '-backend');
       trimmed = `https://${backendHostname}`;
     }
   }

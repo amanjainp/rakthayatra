@@ -10,17 +10,12 @@ import donationRoutes from './routes/donation.routes';
 import bloodRequestRoutes from './routes/blood-request.routes';
 import medicalEligibilityRoutes from './routes/medical-eligibility.routes';
 import donationCampRoutes from './routes/donation-camp.routes';
-import facilityRoutes from './routes/facility.routes';
-import chatbotRoutes from './routes/chatbot.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
 import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
-
-// Trust reverse proxy (Render, Cloudflare, etc.) so req.ip and rate limiters work properly
-app.set('trust proxy', 1);
 
 // Apply Logging context middleware first to set request/correlation IDs
 app.use(loggingMiddleware);
@@ -60,7 +55,6 @@ const globalLimiter = rateLimit({
   max: 10000, // Increased limit for development/testing to avoid lockouts
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false, default: true },
   message: {
     success: false,
     error: {
@@ -77,8 +71,6 @@ app.use('/api/donations', donationRoutes);
 app.use('/api/requests', bloodRequestRoutes);
 app.use('/api/eligibility', medicalEligibilityRoutes);
 app.use('/api/camps', donationCampRoutes);
-app.use('/api/facilities', facilityRoutes);
-app.use('/api/chatbot', chatbotRoutes);
 
 // Root API Welcome / Status probe
 const rootStatusHandler = (req: Request, res: Response) => {
@@ -145,7 +137,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     success: false,
     error: {
       code: 'INTERNAL_SERVER_ERROR',
-      message: err?.message || 'An unexpected database or server error occurred.',
+      message: 'An unexpected database or server error occurred.',
     },
   });
 });

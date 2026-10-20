@@ -5,17 +5,10 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-// In development, relax rate limits so E2E test suites (Playwright) running
-// against localhost don't get locked out. Production retains strict limits.
-const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'staging';
-
 // Endpoint-specific Rate Limiters
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,          // 15 minutes
-  max: isDev ? 100 : 30,             // PROD: 30 | DEV: 100
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, default: true },
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 5, // Limit 5 logins per window per IP
   message: {
     success: false,
     error: {
@@ -26,11 +19,8 @@ const loginLimiter = rateLimit({
 });
 
 const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,          // 1 hour
-  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, default: true },
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit 3 accounts per hour per IP
   message: {
     success: false,
     error: {
@@ -42,10 +32,7 @@ const registerLimiter = rateLimit({
 
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, default: true },
+  max: 10,
   message: {
     success: false,
     error: {
@@ -57,19 +44,15 @@ const otpLimiter = rateLimit({
 
 const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 50 : 20,              // PROD: 20 | DEV: 50
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, default: true },
+  max: 5,
   message: {
     success: false,
     error: {
       code: 'TOO_MANY_PASSWORD_RESETS',
-      message: 'Too many password reset attempts. Please try again later.',
+      message: 'Too many password reset attempts. Please try again after 15 minutes.',
     },
   },
 });
-
 
 // Authentication Routes
 router.post('/register', registerLimiter, authController.register);
