@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../config/logger';
+import { env } from '../config/env';
 
 const prisma = new PrismaClient();
 
@@ -26,6 +27,53 @@ export interface ChatbotResponse {
 }
 
 export class ChatbotService {
+  /**
+   * Calls Google Gemini API if GEMINI_API_KEY is configured.
+   */
+  private async queryGemini(prompt: string, lang: 'en' | 'kn', role: string, page: string): Promise<string | null> {
+    const apiKey = process.env.GEMINI_API_KEY || (env as any).GEMINI_API_KEY;
+    if (!apiKey) return null;
+
+    try {
+      const systemInstruction = `You are LifeLink AI (Rakthayatra blood logistics platform assistant), an intelligent healthcare assistant in India.
+Current User Role: ${role}.
+Current Active Page: ${page}.
+Language for response: ${lang === 'kn' ? 'Kannada (ಕನ್ನಡ)' : 'English'}.
+Guidelines:
+- Explain platform workflows clearly: hospital requisitions to blood banks, emergency donor broadcast alerts, donor appointment booking, live inventory stock.
+- Never diagnose medical conditions; advise users to speak with registered medical practitioners.
+- In emergencies, state: "Call 108 (Ambulance) or 104 (Blood Cell helpline) immediately."
+- Keep replies helpful, polite, and concise (under 4 sentences).`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemInstruction}\n\nUser Question: ${prompt}` }],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        logger.warn(`[Gemini API] Returned status: ${response.status}`);
+        return null;
+      }
+
+      const result: any = await response.json();
+      return result?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } catch (err: any) {
+      logger.warn(`[Gemini API Error] ${err.message}`);
+      return null;
+    }
+  }
+
   async processMessage(query: ChatbotQuery): Promise<ChatbotResponse> {
     const lang = query.language === 'kn' ? 'kn' : 'en';
     const role = query.user?.role || 'GUEST';
@@ -37,6 +85,17 @@ export class ChatbotService {
     // Check if the query is asking for authorized live database data
     if (query.user && this.isAuthorizedDataQuery(text)) {
       return this.handleAuthorizedLookup(query.user, text, lang, page);
+    }
+
+    // Try Gemini API if configured
+    const geminiReply = await this.queryGemini(query.message, lang, role, page);
+    if (geminiReply) {
+      return {
+        reply: geminiReply,
+        language: lang,
+        suggestedActions: this.getSuggestedActionsForRole(role, lang),
+        context: { role, page },
+      };
     }
 
     // Role-specific assistance handlers
@@ -461,6 +520,61 @@ export class ChatbotService {
       ],
       context: { role, page },
     };
+  }
+
+  private getSuggestedActionsForRole(role: string, lang: 'en' | 'kn'): { label: string; action: 'NAVIGATE' | 'QUERY'; payload: string }[] {
+    if (lang === 'kn') {
+      if (role === 'DONOR') {
+        return [
+          { label: 'ನೇಮಕಾತಿ ಬುಕ್ ಮಾಡಿ', action: 'NAVIGATE', payload: '/donor/dashboard' },
+          { label: 'ತುರ್ತು ಎಚ್ಚರಿಕೆಗಳು', action: 'NAVIGATE', payload: '/donor/dashboard' },
+          { label: 'ಅರ್ಹತೆ ಪರಿಶೀಲಿಸಿ', action: 'QUERY', payload: 'Am I eligible to donate blood?' },
+        ];
+      }
+      if (role === 'HOSPITAL') {
+        return [
+          { label: 'ರಕ್ತದ ವಿನಂತಿ ಸಲ್ಲಿಸಿ', action: 'NAVIGATE', payload: '/hospital/dashboard' },
+          { label: 'ಸಕ್ರಿಯ ದಾನಿಗಳ ನಕ್ಷೆ', action: 'NAVIGATE', payload: '/hospital/dashboard' },
+        ];
+      }
+      if (role === 'BLOOD_BANK') {
+        return [
+          { label: 'ಒಳಬರುವ ವಿನಂತಿಗಳು', action: 'NAVIGATE', payload: '/blood-bank/dashboard' },
+          { label: 'ದಾಸ್ತಾನು ಪರಿಶೀಲಿಸಿ', action: 'NAVIGATE', payload: '/blood-bank/dashboard' },
+        ];
+      }
+      return [
+        { label: 'ರಕ್ತ ಹುಡುಕಿ', action: 'NAVIGATE', payload: '/#find-blood' },
+        { label: 'ದಾನಿಯಾಗಿ ನೋಂದಾಯಿಸಿ', action: 'NAVIGATE', payload: '/register' },
+        { label: 'ಸಹಾಯವಾಣಿ (108/104)', action: 'QUERY', payload: 'Emergency helpline numbers' },
+      ];
+    }
+
+    if (role === 'DONOR') {
+      return [
+        { label: 'Book Appointment', action: 'NAVIGATE', payload: '/donor/dashboard' },
+        { label: 'Emergency Alerts', action: 'NAVIGATE', payload: '/donor/dashboard' },
+        { label: 'Check Eligibility', action: 'QUERY', payload: 'Am I eligible to donate blood?' },
+      ];
+    }
+    if (role === 'HOSPITAL') {
+      return [
+        { label: 'Raise Requisition', action: 'NAVIGATE', payload: '/hospital/dashboard' },
+        { label: 'Active Donors Map', action: 'NAVIGATE', payload: '/hospital/dashboard' },
+        { label: 'Emergency SOS', action: 'NAVIGATE', payload: '/hospital/dashboard' },
+      ];
+    }
+    if (role === 'BLOOD_BANK') {
+      return [
+        { label: 'Incoming Requisitions', action: 'NAVIGATE', payload: '/blood-bank/dashboard' },
+        { label: 'Check Inventory', action: 'NAVIGATE', payload: '/blood-bank/dashboard' },
+      ];
+    }
+    return [
+      { label: 'Find Blood Online', action: 'NAVIGATE', payload: '/#find-blood' },
+      { label: 'Register as Donor', action: 'NAVIGATE', payload: '/register' },
+      { label: 'Helpline (108 / 104)', action: 'QUERY', payload: 'Emergency helpline numbers' },
+    ];
   }
 
   private getDefaultHelp(lang: 'en' | 'kn', role: string, page: string): ChatbotResponse {

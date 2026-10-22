@@ -10,6 +10,10 @@ import donationRoutes from './routes/donation.routes';
 import bloodRequestRoutes from './routes/blood-request.routes';
 import medicalEligibilityRoutes from './routes/medical-eligibility.routes';
 import donationCampRoutes from './routes/donation-camp.routes';
+import facilityRoutes from './routes/facility.routes';
+import chatbotRoutes from './routes/chatbot.routes';
+import appointmentRoutes from './routes/appointment.routes';
+import notificationRoutes from './routes/notification.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
@@ -71,6 +75,10 @@ app.use('/api/donations', donationRoutes);
 app.use('/api/requests', bloodRequestRoutes);
 app.use('/api/eligibility', medicalEligibilityRoutes);
 app.use('/api/camps', donationCampRoutes);
+app.use('/api/facilities', facilityRoutes);
+app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Root API Welcome / Status probe
 const rootStatusHandler = (req: Request, res: Response) => {

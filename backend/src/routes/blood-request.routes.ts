@@ -41,6 +41,41 @@ router.get('/reverse-geocode', authenticate, (req, res) => bloodRequestControlle
 // 7. Search blood requests (Authenticated users)
 router.get('/', authenticate, (req, res) => bloodRequestController.search(req, res));
 
+// Hospital Requisition to Blood Bank
+router.post('/hospital-requisition', authenticate, requireRoles(['HOSPITAL', 'ADMIN']), (req, res) =>
+  bloodRequestController.createHospitalRequisition(req as any, res)
+);
+
+// Blood Bank Process Requisition
+router.post('/:id/process-requisition', authenticate, requireRoles(['BLOOD_BANK', 'ADMIN']), (req, res) =>
+  bloodRequestController.processRequisition(req as any, res)
+);
+
+// Hospital Emergency Radius Broadcast
+router.post('/emergency-broadcast', authenticate, requireRoles(['HOSPITAL', 'ADMIN']), (req, res) =>
+  bloodRequestController.emergencyBroadcast(req as any, res)
+);
+
+// Donor Respond to Emergency Alert
+router.post('/:id/donor-respond', authenticate, requireRoles(['DONOR']), (req, res) =>
+  bloodRequestController.donorRespond(req as any, res)
+);
+
+// Get Hospital's Requisitions
+router.get('/hospital-requisitions', authenticate, requireRoles(['HOSPITAL', 'ADMIN']), (req, res) =>
+  bloodRequestController.getHospitalRequisitions(req as any, res)
+);
+
+// Get Blood Bank's Incoming Requisitions
+router.get('/bloodbank-incoming', authenticate, requireRoles(['BLOOD_BANK', 'ADMIN']), (req, res) =>
+  bloodRequestController.getIncomingBloodBankRequisitions(req as any, res)
+);
+
+// Get Donor's Emergency Alerts within Radius
+router.get('/donor-emergency-alerts', authenticate, requireRoles(['DONOR']), (req, res) =>
+  bloodRequestController.getDonorEmergencyAlerts(req as any, res)
+);
+
 // 7. Trigger expired requests sweep (Admins only)
 router.post('/expiry-check', authenticate, requireRoles(['ADMIN']), (req, res) =>
   bloodRequestController.triggerExpiryCheck(req, res)

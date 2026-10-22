@@ -12,12 +12,27 @@ import {
   CheckCircle2,
   ShieldCheck,
   Check,
+  X,
+  Calendar,
+  Radio,
+  MapPin,
+  Phone,
+  Clock,
+  UserCheck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
+import {
+  useIncomingBloodBankRequisitions,
+  useProcessRequisition,
+  useMyAppointments,
+  useUpdateAppointmentStatus,
+  useActiveDonorsForFacility,
+  IncomingRequisition,
+} from '../../hooks/useRealtimeLogistics';
 
 interface BloodUnitItem {
   id: string;
@@ -37,10 +52,27 @@ export const BloodBankDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { data, isLoading } = useBloodBankDashboardData();
 
+  // Real-time hooks
+  const { data: incomingRequisitions = [], isLoading: isLoadingRequisitions } = useIncomingBloodBankRequisitions();
+  const processRequisitionMutation = useProcessRequisition();
+  const { data: appointments = [], isLoading: isLoadingAppointments } = useMyAppointments();
+  const updateAppointmentMutation = useUpdateAppointmentStatus();
+
+  // Active Donors Radar State
+  const [mapRadius, setMapRadius] = useState<number>(25);
+  const { data: activeDonors = [], isLoading: isLoadingDonors } = useActiveDonorsForFacility(mapRadius);
+
+  // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [selectedUnitForQr, setSelectedUnitForQr] = useState<BloodUnitItem | null>(null);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
+
+  // Process Requisition Modal state
+  const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
+  const [selectedRequisition, setSelectedRequisition] = useState<IncomingRequisition | null>(null);
+  const [allocatedUnits, setAllocatedUnits] = useState<number>(1);
+  const [responseNotes, setResponseNotes] = useState<string>('');
 
   // Blood Units Inventory with detailed cold-chain metadata
   const [inventoryUnits, setInventoryUnits] = useState<BloodUnitItem[]>([
@@ -63,7 +95,7 @@ export const BloodBankDashboard: React.FC = () => {
       component: 'Whole Blood',
       unitsCount: 4,
       collectionDate: new Date(Date.now() - 32 * 86400000).toISOString().split('T')[0],
-      expiryDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0], // FEFO critical!
+      expiryDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
       storageRack: 'Cold Rack A-09 (-4°C)',
       testingStatus: 'TESTED_SAFE',
       status: 'AVAILABLE',
@@ -91,30 +123,6 @@ export const BloodBankDashboard: React.FC = () => {
       storageRack: 'Deep Freezer F-01 (-30°C)',
       testingStatus: 'TESTED_SAFE',
       status: 'RESERVED',
-    },
-  ]);
-
-  // Incoming Clinical Requests Queue
-  const [incomingRequests, setIncomingRequests] = useState([
-    {
-      id: 'in-req-1',
-      hospitalName: 'Bowring Teaching Hospital',
-      patientRef: 'IP-4412 (Emergency Trauma)',
-      bloodGroup: 'O+',
-      component: 'PRBC',
-      unitsRequested: 2,
-      urgency: 'EMERGENCY',
-      status: 'PENDING_REVIEW',
-    },
-    {
-      id: 'in-req-2',
-      hospitalName: 'St. John’s Medical Centre',
-      patientRef: 'IP-9011 (Elective Surgery)',
-      bloodGroup: 'B+',
-      component: 'Whole Blood',
-      unitsRequested: 1,
-      urgency: 'NORMAL',
-      status: 'PENDING_REVIEW',
     },
   ]);
 
@@ -153,13 +161,39 @@ export const BloodBankDashboard: React.FC = () => {
     toast.success(`Unit ${newUnit.unitId} registered successfully!`);
   };
 
-  const handleRequestAction = (id: string, action: 'RESERVE' | 'REJECT') => {
-    setIncomingRequests((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, status: action === 'RESERVE' ? 'RESERVED_SAFE' : 'REJECTED' } : r
-      )
-    );
-    toast.success(action === 'RESERVE' ? 'Units reserved under FEFO lock!' : 'Request rejected.');
+  const openProcessModal = (req: IncomingRequisition) => {
+    setSelectedRequisition(req);
+    setAllocatedUnits(req.unitsRequired);
+    setResponseNotes(`Units verified from cold storage. Ready for emergency dispatch.`);
+    setIsProcessModalOpen(true);
+  };
+
+  const handleProcessSubmit = async (action: 'ACCEPT' | 'DECLINE') => {
+    if (!selectedRequisition) return;
+    try {
+      await processRequisitionMutation.mutateAsync({
+        requestId: selectedRequisition.id,
+        action,
+        allocatedUnits: action === 'ACCEPT' ? allocatedUnits : 0,
+        responseNotes: responseNotes.trim() || undefined,
+      });
+      setIsProcessModalOpen(false);
+      setSelectedRequisition(null);
+    } catch {
+      // Error handled in hook toast
+    }
+  };
+
+  const handleCompleteAppointment = async (appointmentId: string) => {
+    try {
+      await updateAppointmentMutation.mutateAsync({
+        appointmentId,
+        status: 'COMPLETED',
+      });
+      toast.success('Donation appointment marked as COMPLETED! Donor record updated.');
+    } catch {
+      // Error handled in hook toast
+    }
   };
 
   return (
@@ -178,7 +212,7 @@ export const BloodBankDashboard: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Welcome back, {user?.fullName || 'Blood Bank Officer'}! Manage QR-traceable units, FEFO alerts, and hospital allocations
+              Welcome back, {user?.fullName || 'Blood Bank Officer'}! Manage QR-traceable units, FEFO alerts, hospital allocations, and scheduled appointments
             </p>
           </div>
         </div>
@@ -233,13 +267,301 @@ export const BloodBankDashboard: React.FC = () => {
         </div>
         <button
           onClick={() => handleOpenQr(inventoryUnits[1])}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-all whitespace-nowrap shadow-md shadow-amber-500/20"
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-all whitespace-nowrap shadow-md shadow-amber-500/20 cursor-pointer"
         >
           Inspect QR Passport
         </button>
       </div>
 
-      {/* 4. Blood Unit Records with QR Traceability Ledger */}
+      {/* 4. Real Database Incoming Hospital Requisitions Queue */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-rose-500" />
+              Incoming Hospital Blood Requisitions & Direct Orders
+            </h3>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          </div>
+          <span className="text-xs text-slate-400">
+            {incomingRequisitions.filter((r) => r.status === 'PENDING').length} awaiting action
+          </span>
+        </div>
+
+        {isLoadingRequisitions ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading incoming blood requisitions from database...</div>
+        ) : incomingRequisitions.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">All Requisitions Fulfilled</p>
+            <p className="text-xs text-slate-500">No pending hospital requisitions assigned to this blood bank facility at this moment.</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {incomingRequisitions.map((req) => (
+              <div
+                key={req.id}
+                className={`p-5 rounded-2xl border transition-all space-y-3 ${
+                  req.status === 'APPROVED' || req.status === 'FULFILLED'
+                    ? 'border-emerald-500/30 bg-emerald-950/10'
+                    : req.status === 'CANCELLED'
+                    ? 'border-slate-800 bg-slate-950/40 opacity-50'
+                    : req.urgency === 'EMERGENCY'
+                    ? 'border-rose-500/50 bg-rose-950/20 shadow-lg shadow-rose-950/30'
+                    : 'border-slate-800 bg-slate-900/40 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          req.urgency === 'EMERGENCY'
+                            ? 'bg-rose-500 text-white animate-pulse'
+                            : 'bg-slate-800 text-slate-300'
+                        }`}
+                      >
+                        {req.urgency}
+                      </span>
+                      <span className="text-xs font-bold text-white">
+                        {req.requester?.hospitalProfile?.name || 'Hospital Request'}
+                      </span>
+                    </div>
+                    {req.requester?.hospitalProfile?.city && (
+                      <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-500" />
+                        {req.requester.hospitalProfile.city} • {req.requester.hospitalProfile.address}
+                      </p>
+                    )}
+                    {req.requester?.hospitalProfile?.phone && (
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-slate-500" />
+                        {req.requester.hospitalProfile.phone}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-200 mt-2">
+                      Required:{' '}
+                      <strong className="text-rose-400 font-bold">{req.unitsRequired} Units</strong> of{' '}
+                      <strong className="text-white font-bold">{req.bloodGroup.replace('_', '+')}</strong>
+                    </p>
+                    {req.message && (
+                      <p className="text-[11px] text-slate-300 italic mt-1 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                        "{req.message}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                        req.status === 'APPROVED' || req.status === 'FULFILLED'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : req.status === 'CANCELLED'
+                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}
+                    >
+                      {req.status}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+
+                {req.responseNotes && (
+                  <div className="text-[11px] text-emerald-300 bg-emerald-950/20 p-2 rounded-lg border border-emerald-500/20">
+                    <strong>Bank Note:</strong> {req.responseNotes}
+                  </div>
+                )}
+
+                {req.status === 'PENDING' && (
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800/80">
+                    <button
+                      onClick={() => openProcessModal(req)}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors flex items-center gap-1.5 shadow-md shadow-rose-600/30 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Review & Process Requisition
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 5. Scheduled Donor Appointments Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-500" />
+              Scheduled Voluntary Donor Appointments
+            </h3>
+            <p className="text-xs text-slate-400">
+              Donors who selected this facility for voluntary blood donation slot
+            </p>
+          </div>
+          <span className="text-xs text-slate-400">
+            {appointments.filter((a) => a.status === 'SCHEDULED').length} upcoming slots
+          </span>
+        </div>
+
+        {isLoadingAppointments ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading appointments...</div>
+        ) : appointments.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <UserCheck className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Scheduled Appointments</p>
+            <p className="text-xs text-slate-500">When donors book a slot at this blood bank, it will appear here in real time.</p>
+          </div>
+        ) : (
+          <div className="border border-slate-800/80 rounded-2xl bg-slate-900/40 backdrop-blur-xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4">Donor Name</th>
+                    <th className="py-3 px-4">Blood Group</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Date & Time Slot</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {appointments.map((apt) => (
+                    <tr key={apt.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="py-3 px-4 font-bold text-white">
+                        {apt.donor?.fullName || 'Anonymous Donor'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 font-bold border border-rose-500/20">
+                          {apt.donor?.bloodGroup || 'O+'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 font-mono">
+                        {apt.donor?.phone || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-slate-200 font-semibold">{apt.appointmentDate}</div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {apt.timeSlot}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            apt.status === 'COMPLETED'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : apt.status === 'CANCELLED'
+                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}
+                        >
+                          {apt.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {apt.status === 'SCHEDULED' && (
+                          <button
+                            onClick={() => handleCompleteAppointment(apt.id)}
+                            disabled={updateAppointmentMutation.isPending}
+                            className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors inline-flex items-center gap-1 shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark Donated
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 6. Role-Specific Real-Time Emergency Radar: Active Donors within Radius */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <Radio className="w-5 h-5 text-rose-500 animate-pulse" />
+              Active Voluntary Donors within Emergency Radius
+            </h3>
+            <p className="text-xs text-slate-400">
+              Real-time map and list showing active donors registered within radius (excludes other blood banks)
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-semibold">Radar Range:</span>
+            {[10, 25, 50, 100].map((r) => (
+              <button
+                key={r}
+                onClick={() => setMapRadius(r)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  mapRadius === r
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {r} km
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/30 space-y-4">
+          <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800/60 pb-3">
+            <span>
+              Found <strong className="text-rose-400">{activeDonors.length} active donors</strong> within {mapRadius} km
+            </span>
+            <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Live Radar Active
+            </span>
+          </div>
+
+          {isLoadingDonors ? (
+            <div className="p-8 text-center text-xs text-slate-500">Scanning active donors in radius...</div>
+          ) : activeDonors.length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-500">
+              No active donors currently registered within {mapRadius} km. Expand radar range to 50km or 100km.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activeDonors.map((donor) => (
+                <div
+                  key={donor.id}
+                  className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start justify-between gap-3 hover:border-slate-700 transition-all"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs">{donor.fullName}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        {donor.bloodGroup}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-slate-500" />
+                      {donor.address || 'Bengaluru'}
+                    </p>
+                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Ready for emergency donor matching
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded-lg border border-rose-500/20 whitespace-nowrap">
+                    {donor.distanceKm} km away
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 7. Blood Unit Records with QR Traceability Ledger */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
@@ -290,7 +612,7 @@ export const BloodBankDashboard: React.FC = () => {
                 </span>
                 <button
                   onClick={() => handleOpenQr(u)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 cursor-pointer"
                 >
                   <QrCode className="w-3 h-3 text-rose-400" /> QR Code
                 </button>
@@ -300,88 +622,7 @@ export const BloodBankDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Incoming Requests Queue from Hospitals */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-            <CheckSquare className="w-5 h-5 text-rose-500" />
-            Incoming Clinical Blood Orders & Reservations
-          </h3>
-          <span className="text-xs text-slate-400">
-            {incomingRequests.filter((r) => r.status === 'PENDING_REVIEW').length} pending review
-          </span>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          {incomingRequests.map((req) => (
-            <div
-              key={req.id}
-              className={`p-5 rounded-2xl border transition-all space-y-3 ${
-                req.status === 'RESERVED_SAFE'
-                  ? 'border-emerald-500/30 bg-emerald-950/10'
-                  : req.status === 'REJECTED'
-                  ? 'border-slate-800 bg-slate-950/40 opacity-50'
-                  : 'border-slate-800 bg-slate-900/30 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        req.urgency === 'EMERGENCY'
-                          ? 'bg-rose-500 text-white animate-pulse'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {req.urgency}
-                    </span>
-                    <span className="text-xs font-bold text-white">{req.hospitalName}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Patient Reference: <strong className="text-slate-200">{req.patientRef}</strong>
-                  </p>
-                  <p className="text-xs text-slate-300">
-                    Requisition: <strong className="text-rose-400 font-bold">{req.unitsRequested} Units</strong> of{' '}
-                    <strong className="text-white">{req.bloodGroup}</strong> ({req.component})
-                  </p>
-                </div>
-
-                <span
-                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                    req.status === 'RESERVED_SAFE'
-                      ? 'bg-emerald-500/10 text-emerald-400'
-                      : req.status === 'REJECTED'
-                      ? 'bg-rose-500/10 text-rose-400'
-                      : 'bg-slate-800 text-amber-400'
-                  }`}
-                >
-                  {req.status}
-                </span>
-              </div>
-
-              {req.status === 'PENDING_REVIEW' && (
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800/80">
-                  <button
-                    onClick={() => handleRequestAction(req.id, 'REJECT')}
-                    className="px-3 py-1 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleRequestAction(req.id, 'RESERVE')}
-                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-colors flex items-center gap-1 shadow-md shadow-rose-600/30"
-                  >
-                    <Check className="w-3.5 h-3.5" /> Accept & Reserve Stock
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 6. Quick Actions Grid */}
+      {/* 8. Quick Actions Grid */}
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-white font-display">Logistics Action Items</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -403,11 +644,96 @@ export const BloodBankDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 7. QR Traceability Modal */}
+      {/* 9. Process Hospital Requisition Modal */}
+      <Modal
+        isOpen={isProcessModalOpen}
+        onClose={() => setIsProcessModalOpen(false)}
+        title="Process Hospital Blood Requisition"
+      >
+        {selectedRequisition && (
+          <div className="space-y-4 text-xs text-slate-200">
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Requesting Hospital:</span>
+                <span className="font-bold text-white">
+                  {selectedRequisition.requester?.hospitalProfile?.name || 'Hospital'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Blood Group & Urgency:</span>
+                <span className="font-bold text-rose-400">
+                  {selectedRequisition.bloodGroup.replace('_', '+')} ({selectedRequisition.urgency})
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Units Requested:</span>
+                <span className="font-bold text-white">{selectedRequisition.unitsRequired} Units</span>
+              </div>
+              {selectedRequisition.message && (
+                <div className="pt-2 border-t border-slate-800">
+                  <span className="text-slate-400 block mb-1">Clinical Note / Reason:</span>
+                  <p className="text-slate-300 italic">{selectedRequisition.message}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Allocated Units to Release *</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={selectedRequisition.unitsRequired}
+                  value={allocatedUnits}
+                  onChange={(e) => setAllocatedUnits(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Response & Cold Chain Instructions</label>
+                <textarea
+                  value={responseNotes}
+                  onChange={(e) => setResponseNotes(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
+                  placeholder="Specify batch ID, temperature box ref, or reason for decline..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleProcessSubmit('DECLINE')}
+                disabled={processRequisitionMutation.isPending}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-red-400 bg-red-950/30 border border-red-500/30 hover:bg-red-900/40 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-3.5 h-3.5" /> Decline Request
+              </button>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsProcessModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => handleProcessSubmit('ACCEPT')}
+                  disabled={processRequisitionMutation.isPending}
+                  className="flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" /> Accept & Allocate Stock
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 10. QR Traceability Modal */}
       <Modal isOpen={isQrOpen} onClose={() => setIsQrOpen(false)} title="Blood Bag Digital QR Traceability Passport">
         {selectedUnitForQr && (
           <div className="space-y-5 text-xs text-slate-200">
-            {/* Visual QR Code Generator Simulation */}
             <div className="p-6 rounded-2xl bg-white flex flex-col items-center justify-center text-slate-950 space-y-3 shadow-2xl">
               <div className="w-40 h-40 border-4 border-slate-900 rounded-xl p-2 flex items-center justify-center relative bg-white">
                 <QrCode className="w-36 h-36 text-slate-900" />
@@ -416,7 +742,6 @@ export const BloodBankDashboard: React.FC = () => {
               <span className="text-[10px] text-slate-600 font-bold">DIGITAL COLD-CHAIN IDENTIFIER</span>
             </div>
 
-            {/* Passport Details */}
             <div className="space-y-2 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
               <div className="flex justify-between">
                 <span className="text-slate-400">Blood Product:</span>
@@ -458,7 +783,7 @@ export const BloodBankDashboard: React.FC = () => {
         )}
       </Modal>
 
-      {/* 8. Register Blood Stock Modal */}
+      {/* 11. Register Blood Stock Modal */}
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Register Screened Blood Unit Batch">
         <form onSubmit={handleAddUnitSubmit} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
@@ -532,7 +857,7 @@ export const BloodBankDashboard: React.FC = () => {
         </form>
       </Modal>
 
-      {/* 9. Inter-Bank Transfer Modal */}
+      {/* 12. Inter-Bank Transfer Modal */}
       <Modal isOpen={isTransferOpen} onClose={() => setIsTransferOpen(false)} title="Initiate Inter-Bank Blood Transfer">
         <form
           onSubmit={(e) => {
@@ -592,4 +917,5 @@ export const BloodBankDashboard: React.FC = () => {
     </div>
   );
 };
+
 export default BloodBankDashboard;

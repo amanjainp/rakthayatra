@@ -133,6 +133,7 @@ model DonorProfile {
   
   eligibility           MedicalEligibility?
   donations             Donation[]
+  appointments          Appointment[]
   donationCampId        String?
   donationCamp          DonationCamp?       @relation(fields: [donationCampId], references: [id], onDelete: SetNull)
 
@@ -169,6 +170,8 @@ model HospitalProfile {
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  
+  appointments  Appointment[]
 
   @@index([latitude, longitude])
 }
@@ -189,8 +192,11 @@ model BloodBankProfile {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   
-  inventory     BloodInventory[]
-  donations     Donation[]
+  inventory            BloodInventory[]
+  donations            Donation[]
+  appointments         Appointment[]
+  targetedRequests     BloodRequest[]   @relation("TargetedBloodBank")
+  allocatedRequests    BloodRequest[]   @relation("AllocatedBloodBank")
 
   @@index([latitude, longitude])
 }
@@ -211,23 +217,33 @@ model BloodInventory {
 }
 
 model BloodRequest {
-  id            String         @id @default(uuid())
-  requesterId   String
-  requester     User           @relation("UserRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  bloodGroup    BloodGroup
-  unitsRequired Int
-  urgency       RequestUrgency @default(NORMAL)
-  status        RequestStatus  @default(PENDING)
-  locationName  String
-  latitude      Float
-  longitude     Float
-  message       String?
-  expiresAt     DateTime
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                   String            @id @default(uuid())
+  requesterId          String
+  requester            User              @relation("UserRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  bloodGroup           BloodGroup
+  unitsRequired        Int
+  urgency              RequestUrgency    @default(NORMAL)
+  status               RequestStatus     @default(PENDING)
+  locationName         String
+  latitude             Float
+  longitude            Float
+  message              String?
+  targetBloodBankId    String?
+  targetBloodBank      BloodBankProfile? @relation("TargetedBloodBank", fields: [targetBloodBankId], references: [id], onDelete: SetNull)
+  allocatedBloodBankId String?
+  allocatedBloodBank   BloodBankProfile? @relation("AllocatedBloodBank", fields: [allocatedBloodBankId], references: [id], onDelete: SetNull)
+  allocatedUnits       Int               @default(0)
+  responseNotes        String?
+  radiusKm             Float?            @default(100)
+  acceptedDonorIds     String[]          @default([])
+  expiresAt            DateTime
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   @@index([latitude, longitude])
   @@index([bloodGroup, status])
+  @@index([targetBloodBankId])
+  @@index([allocatedBloodBankId])
 }
 
 model Donation {
@@ -338,4 +354,26 @@ model NotificationAudit {
 
   @@index([eventId])
   @@index([status])
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  donorProfileId  String
+  donor           DonorProfile      @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
+  facilityType    String            // "HOSPITAL" or "BLOOD_BANK"
+  hospitalId      String?
+  hospital        HospitalProfile?  @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
+  bloodBankId     String?
+  bloodBank       BloodBankProfile? @relation(fields: [bloodBankId], references: [id], onDelete: SetNull)
+  appointmentDate DateTime
+  timeSlot        String            // e.g. "09:00 AM - 11:00 AM"
+  status          String            @default("SCHEDULED") // "SCHEDULED", "COMPLETED", "CANCELLED"
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([donorProfileId])
+  @@index([hospitalId])
+  @@index([bloodBankId])
+  @@index([appointmentDate, status])
 }

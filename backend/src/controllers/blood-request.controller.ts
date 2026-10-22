@@ -533,6 +533,177 @@ export class BloodRequestController {
       return handleControllerError(res, error);
     }
   }
+
+  /**
+   * POST /api/requests/hospital-requisition
+   * Hospital raises direct requisition to a blood bank.
+   */
+  async createHospitalRequisition(req: AuthenticatedRequest, res: Response) {
+    try {
+      const hospitalUserId = req.user!.userId;
+      const { targetBloodBankId, bloodGroup, unitsRequired, urgency, message } = req.body;
+
+      if (!targetBloodBankId || !bloodGroup || !unitsRequired) {
+        throw new BadRequestError('targetBloodBankId, bloodGroup, and unitsRequired are required.');
+      }
+
+      const requisition = await bloodRequestService.createHospitalRequisition(hospitalUserId, {
+        targetBloodBankId,
+        bloodGroup,
+        unitsRequired: Number(unitsRequired),
+        urgency,
+        message,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Requisition ticket raised successfully.',
+        data: requisition,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * POST /api/requests/:id/process-requisition
+   * Blood Bank responds to a hospital requisition.
+   */
+  async processRequisition(req: AuthenticatedRequest, res: Response) {
+    try {
+      const bloodBankUserId = req.user!.userId;
+      const { id } = req.params;
+      const { action, allocatedUnits, responseNotes } = req.body;
+
+      if (!action || !['ACCEPT', 'DECLINE'].includes(action)) {
+        throw new BadRequestError('action must be ACCEPT or DECLINE.');
+      }
+
+      const result = await bloodRequestService.processRequisition(bloodBankUserId, id, {
+        action,
+        allocatedUnits: allocatedUnits ? Number(allocatedUnits) : undefined,
+        responseNotes,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Requisition ${action === 'ACCEPT' ? 'accepted and allocated' : 'declined'}.`,
+        data: result,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * POST /api/requests/emergency-broadcast
+   * Hospital broadcasts emergency alert to donors within configurable radius.
+   */
+  async emergencyBroadcast(req: AuthenticatedRequest, res: Response) {
+    try {
+      const hospitalUserId = req.user!.userId;
+      const { bloodGroup, unitsRequired, radiusKm, message } = req.body;
+
+      if (!bloodGroup || !unitsRequired) {
+        throw new BadRequestError('bloodGroup and unitsRequired are required.');
+      }
+
+      const result = await bloodRequestService.emergencyBroadcast(hospitalUserId, {
+        bloodGroup,
+        unitsRequired: Number(unitsRequired),
+        radiusKm: radiusKm ? Number(radiusKm) : 100,
+        message,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `Emergency alert broadcasted to ${result.alertedDonorsCount} active donors within ${radiusKm || 100}km radius.`,
+        data: result,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * POST /api/requests/:id/donor-respond
+   * Donor accepts or declines emergency alert.
+   */
+  async donorRespond(req: AuthenticatedRequest, res: Response) {
+    try {
+      const donorUserId = req.user!.userId;
+      const { id } = req.params;
+      const { action } = req.body;
+
+      if (!action || !['ACCEPT', 'DECLINE'].includes(action)) {
+        throw new BadRequestError('action must be ACCEPT or DECLINE.');
+      }
+
+      const result = await bloodRequestService.respondToEmergencyAlert(donorUserId, id, { action });
+
+      return res.status(200).json({
+        success: true,
+        message: action === 'ACCEPT' ? 'Thank you! Your response was sent to the hospital.' : 'Alert dismissed.',
+        data: result,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/requests/hospital-requisitions
+   * Hospital fetches its raised requisitions.
+   */
+  async getHospitalRequisitions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const hospitalUserId = req.user!.userId;
+      const requisitions = await bloodRequestService.getHospitalRequisitions(hospitalUserId);
+
+      return res.status(200).json({
+        success: true,
+        data: requisitions,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/requests/bloodbank-incoming
+   * Blood bank fetches incoming requisitions.
+   */
+  async getIncomingBloodBankRequisitions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const bloodBankUserId = req.user!.userId;
+      const requisitions = await bloodRequestService.getIncomingBloodBankRequisitions(bloodBankUserId);
+
+      return res.status(200).json({
+        success: true,
+        data: requisitions,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/requests/donor-emergency-alerts
+   * Donor fetches active emergency alerts within radius.
+   */
+  async getDonorEmergencyAlerts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const donorUserId = req.user!.userId;
+      const alerts = await bloodRequestService.getEmergencyRequestsForDonor(donorUserId);
+
+      return res.status(200).json({
+        success: true,
+        data: alerts,
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
 }
 
 export const bloodRequestController = new BloodRequestController();

@@ -579,6 +579,385 @@ export class BloodRequestService {
       donors: matchedDonors,
     };
   }
+
+  /**
+   * Hospital creates a targeted blood requisition to a specific blood bank.
+   */
+  async createHospitalRequisition(hospitalUserId: string, data: {
+    targetBloodBankId: string;
+    bloodGroup: BloodGroup;
+    unitsRequired: number;
+    urgency?: RequestUrgency;
+    message?: string;
+  }) {
+    if (data.unitsRequired <= 0) {
+      throw new BadRequestError('Units required must be greater than zero.');
+    }
+
+    const hospital = await prisma.hospitalProfile.findUnique({
+      where: { userId: hospitalUserId },
+    });
+    if (!hospital) {
+      throw new BadRequestError('Hospital profile not found for this account.');
+    }
+
+    const bloodBank = await prisma.bloodBankProfile.findUnique({
+      where: { id: data.targetBloodBankId },
+      include: { user: true },
+    });
+    if (!bloodBank) {
+      throw new NotFoundError('Target blood bank not found.');
+    }
+
+    const urgency = data.urgency || RequestUrgency.NORMAL;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + (urgency === RequestUrgency.EMERGENCY ? 2 : 7));
+
+    const requisition = await prisma.bloodRequest.create({
+      data: {
+        requesterId: hospitalUserId,
+        bloodGroup: data.bloodGroup,
+        unitsRequired: data.unitsRequired,
+        urgency,
+        status: RequestStatus.PENDING,
+        locationName: hospital.name,
+        latitude: hospital.latitude,
+        longitude: hospital.longitude,
+        message: data.message,
+        targetBloodBankId: bloodBank.id,
+        expiresAt,
+      },
+      include: {
+        targetBloodBank: { select: { id: true, name: true, phone: true, address: true, city: true } },
+      },
+    });
+
+    // Create real in-app notification for the target blood bank
+    await prisma.notification.create({
+      data: {
+        userId: bloodBank.userId,
+        title: `🏥 New Requisition from ${hospital.name}`,
+        message: `${hospital.name} has requested ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')} (${urgency}). Requisition #${requisition.id.slice(0, 8)}.`,
+        type: 'EMERGENCY_ALERT',
+      },
+    });
+
+    logger.info(`[Requisition] Created ticket ${requisition.id} from ${hospital.name} to ${bloodBank.name}`);
+    return requisition;
+  }
+
+  /**
+   * Blood bank reviews hospital requisition and responds (Accept & allocate, or Decline).
+   */
+  async processRequisition(bloodBankUserId: string, requestId: string, response: {
+    action: 'ACCEPT' | 'DECLINE';
+    allocatedUnits?: number;
+    responseNotes?: string;
+  }) {
+    const bloodBank = await prisma.bloodBankProfile.findUnique({
+      where: { userId: bloodBankUserId },
+    });
+    if (!bloodBank) {
+      throw new BadRequestError('Blood bank profile not found for this account.');
+    }
+
+    const request = await prisma.bloodRequest.findUnique({
+      where: { id: requestId },
+      include: { requester: true },
+    });
+    if (!request) {
+      throw new NotFoundError('Requisition request not found.');
+    }
+
+    if (request.targetBloodBankId && request.targetBloodBankId !== bloodBank.id) {
+      throw new BadRequestError('This requisition is assigned to a different blood bank.');
+    }
+
+    if (response.action === 'ACCEPT') {
+      const allocatedUnits = response.allocatedUnits || request.unitsRequired;
+      const isFull = allocatedUnits >= request.unitsRequired;
+
+      const updated = await prisma.bloodRequest.update({
+        where: { id: requestId },
+        data: {
+          status: isFull ? RequestStatus.FULFILLED : RequestStatus.APPROVED,
+          allocatedBloodBankId: bloodBank.id,
+          allocatedUnits,
+          responseNotes: response.responseNotes || 'Units reserved and ready for pickup/dispatch.',
+        },
+        include: {
+          allocatedBloodBank: { select: { id: true, name: true, phone: true, address: true } },
+          targetBloodBank: { select: { id: true, name: true, phone: true } },
+        },
+      });
+
+      // Send real in-app notification to the Hospital user
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `✅ Requisition #${requestId.slice(0, 8)} Accepted by ${bloodBank.name}`,
+          message: `${bloodBank.name} has allocated ${allocatedUnits} units of ${request.bloodGroup.replace('_', '+')}. Note: ${response.responseNotes || 'Ready for collection.'}`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
+
+      return updated;
+    } else {
+      // DECLINE
+      const updated = await prisma.bloodRequest.update({
+        where: { id: requestId },
+        data: {
+          status: RequestStatus.CANCELLED,
+          responseNotes: response.responseNotes || 'Insufficient stock at blood bank.',
+        },
+      });
+
+      // Send real in-app notification to the Hospital user
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `❌ Requisition #${requestId.slice(0, 8)} Declined by ${bloodBank.name}`,
+          message: `${bloodBank.name} was unable to fulfill your request for ${request.bloodGroup.replace('_', '+')}. Reason: ${response.responseNotes || 'Out of stock'}. Consider broadcasting an emergency alert to active donors.`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
+
+      return updated;
+    }
+  }
+
+  /**
+   * Hospital broadcasts an emergency alert to active donors within configurable radius (e.g. 5 to 100km+).
+   */
+  async emergencyBroadcast(hospitalUserId: string, data: {
+    bloodGroup: BloodGroup;
+    unitsRequired: number;
+    radiusKm: number;
+    message?: string;
+  }) {
+    const hospital = await prisma.hospitalProfile.findUnique({
+      where: { userId: hospitalUserId },
+    });
+    if (!hospital) {
+      throw new BadRequestError('Hospital profile not found.');
+    }
+
+    const radius = data.radiusKm || 100;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 2); // 48h emergency expiry
+
+    // 1. Create emergency BloodRequest record
+    const request = await prisma.bloodRequest.create({
+      data: {
+        requesterId: hospitalUserId,
+        bloodGroup: data.bloodGroup,
+        unitsRequired: data.unitsRequired,
+        urgency: RequestUrgency.EMERGENCY,
+        status: RequestStatus.PENDING,
+        locationName: hospital.name,
+        latitude: hospital.latitude,
+        longitude: hospital.longitude,
+        message: data.message || `Emergency shortage at ${hospital.name}. Immediate donors required.`,
+        radiusKm: radius,
+        expiresAt,
+      },
+    });
+
+    // 2. Find all active donors within radius
+    const compatibleGroups = BLOOD_COMPATIBILITY[data.bloodGroup];
+    const allActiveDonors = await prisma.donorProfile.findMany({
+      where: {
+        isAvailable: true,
+        bloodGroup: { in: compatibleGroups },
+        deletedAt: null,
+      },
+      include: { user: true },
+    });
+
+    const alertedDonors: any[] = [];
+    for (const donor of allActiveDonors) {
+      const distance = mapsService.calculateDistance(
+        hospital.latitude,
+        hospital.longitude,
+        donor.latitude,
+        donor.longitude
+      );
+
+      if (distance <= radius) {
+        alertedDonors.push({
+          donorId: donor.id,
+          userId: donor.userId,
+          fullName: donor.fullName,
+          bloodGroup: donor.bloodGroup,
+          distanceKm: parseFloat(distance.toFixed(1)),
+        });
+
+        // Create persistent in-app notification for the donor
+        await prisma.notification.create({
+          data: {
+            userId: donor.userId,
+            title: `🚨 EMERGENCY: Blood Urgently Needed at ${hospital.name}`,
+            message: `${hospital.name} (${distance.toFixed(1)} km away) urgently requires ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')}. Please open your dashboard to respond!`,
+            type: 'EMERGENCY_ALERT',
+          },
+        });
+      }
+    }
+
+    logger.info(`[EmergencyBroadcast] Hospital ${hospital.name} alerted ${alertedDonors.length} donors within ${radius}km for ${data.bloodGroup}`);
+    return {
+      request,
+      alertedDonorsCount: alertedDonors.length,
+      donors: alertedDonors,
+    };
+  }
+
+  /**
+   * Donor accepts or declines an emergency blood request.
+   */
+  async respondToEmergencyAlert(donorUserId: string, requestId: string, response: { action: 'ACCEPT' | 'DECLINE' }) {
+    const donor = await prisma.donorProfile.findUnique({
+      where: { userId: donorUserId },
+    });
+    if (!donor) {
+      throw new BadRequestError('Donor profile not found.');
+    }
+
+    const request = await prisma.bloodRequest.findUnique({
+      where: { id: requestId },
+      include: { requester: true },
+    });
+    if (!request) {
+      throw new NotFoundError('Emergency blood request not found.');
+    }
+
+    if (response.action === 'ACCEPT') {
+      const currentAccepted = request.acceptedDonorIds || [];
+      if (!currentAccepted.includes(donor.id)) {
+        currentAccepted.push(donor.id);
+      }
+
+      const updated = await prisma.bloodRequest.update({
+        where: { id: requestId },
+        data: {
+          acceptedDonorIds: currentAccepted,
+        },
+      });
+
+      // Notify the hospital in real time
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `🩸 Donor Accepted Alert: ${donor.fullName}`,
+          message: `Voluntary donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}, Phone: ${donor.phone}) has accepted your emergency request #${requestId.slice(0, 8)} and is coming to donate!`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
+
+      // Confirm to donor
+      await prisma.notification.create({
+        data: {
+          userId: donorUserId,
+          title: `🙏 Thank You for Answering the Call!`,
+          message: `Your willingness to donate for ${request.locationName} has been communicated to the hospital. Venue: ${request.locationName}.`,
+          type: 'DONATION_REMINDER',
+        },
+      });
+
+      return updated;
+    } else {
+      return { message: 'Alert declined.' };
+    }
+  }
+
+  /**
+   * Get all requisitions raised by a hospital.
+   */
+  async getHospitalRequisitions(hospitalUserId: string) {
+    return prisma.bloodRequest.findMany({
+      where: { requesterId: hospitalUserId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        targetBloodBank: { select: { id: true, name: true, phone: true, address: true, city: true } },
+        allocatedBloodBank: { select: { id: true, name: true, phone: true, address: true, city: true } },
+      },
+    });
+  }
+
+  /**
+   * Get incoming requisitions targeting a blood bank.
+   */
+  async getIncomingBloodBankRequisitions(bloodBankUserId: string) {
+    const bank = await prisma.bloodBankProfile.findUnique({
+      where: { userId: bloodBankUserId },
+    });
+    if (!bank) return [];
+
+    return prisma.bloodRequest.findMany({
+      where: { targetBloodBankId: bank.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        requester: {
+          select: {
+            id: true,
+            email: true,
+            hospitalProfile: { select: { id: true, name: true, phone: true, address: true, city: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get emergency requests matching a donor within radius.
+   */
+  async getEmergencyRequestsForDonor(donorUserId: string) {
+    const donor = await prisma.donorProfile.findUnique({
+      where: { userId: donorUserId },
+    });
+    if (!donor) return [];
+
+    const compatibleGroups = BLOOD_COMPATIBILITY[donor.bloodGroup];
+
+    const activeEmergencyRequests = await prisma.bloodRequest.findMany({
+      where: {
+        urgency: RequestUrgency.EMERGENCY,
+        status: { in: [RequestStatus.PENDING, RequestStatus.APPROVED] },
+        bloodGroup: { in: compatibleGroups },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        requester: {
+          select: {
+            hospitalProfile: { select: { id: true, name: true, phone: true, address: true, city: true } },
+          },
+        },
+      },
+    });
+
+    // Filter by radiusKm
+    const results = [];
+    for (const req of activeEmergencyRequests) {
+      const radius = req.radiusKm || 100;
+      const distance = mapsService.calculateDistance(
+        donor.latitude,
+        donor.longitude,
+        req.latitude,
+        req.longitude
+      );
+
+      if (distance <= radius) {
+        results.push({
+          ...req,
+          distanceKm: parseFloat(distance.toFixed(1)),
+          hasAccepted: (req.acceptedDonorIds || []).includes(donor.id),
+        });
+      }
+    }
+
+    return results;
+  }
 }
 
 export const bloodRequestService = new BloodRequestService();

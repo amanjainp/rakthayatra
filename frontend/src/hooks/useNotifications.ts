@@ -18,37 +18,13 @@ export const useNotifications = () => {
     queryKey: ['notifications'],
     queryFn: async () => {
       try {
-        const res = await apiClient.get('/notifications').catch(() => null);
-        return (res?.data?.data || [
-          {
-            id: 'notif-1',
-            userId: 'user-1',
-            title: 'EMERGENCY: Compatible AB- Blood Needed',
-            body: 'A patient at Max Hospital needs 2 units immediately. Match is within 12km.',
-            read: false,
-            createdAt: new Date(Date.now() - 300000).toISOString(), // 5 mins ago
-          },
-          {
-            id: 'notif-2',
-            userId: 'user-1',
-            title: 'Donation Appointment Scheduled',
-            body: 'Your appointment at Sector 39 Camp is scheduled for tomorrow at 10:00 AM.',
-            read: false,
-            createdAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-          },
-          {
-            id: 'notif-3',
-            userId: 'user-1',
-            title: 'Welcome to LifeLink',
-            body: 'Thank you for registering on the Rakthayatra platform!',
-            read: true,
-            createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-          },
-        ]) as NotificationItem[];
+        const res = await apiClient.get('/notifications');
+        return (res?.data?.data || []) as NotificationItem[];
       } catch {
         return [] as NotificationItem[];
       }
     },
+    refetchInterval: 10000, // Poll every 10s for real-time live updates
   });
 
   const markAsReadMutation = useMutation({

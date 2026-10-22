@@ -29,6 +29,7 @@ const envSchema = z.object({
   FIREBASE_SERVICE_ACCOUNT: z.string().optional(),
   REDIS_URL: z.string().optional(),
   RABBITMQ_URL: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -1,467 +1,599 @@
 import React, { useState } from 'react';
-import { useHospitalDashboardData } from '../../hooks/useDashboardData';
 import {
   Building,
   Plus,
-  Search,
-  Calendar,
   AlertOctagon,
   Clock,
-  Check,
   ShieldCheck,
   Flame,
+  Radio,
+  Users,
+  MapPin,
+  CheckCircle2,
+  Phone,
+  Send,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import toast from 'react-hot-toast';
+import {
+  useHospitalRequisitions,
+  useCreateHospitalRequisition,
+  useEmergencyBroadcast,
+  useRegisteredFacilities,
+  useActiveDonorsForFacility,
+} from '../../hooks/useRealtimeLogistics';
 
 export const HospitalDashboard: React.FC = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const { data, isLoading } = useHospitalDashboardData();
 
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [selectedReqForConfirm, setSelectedReqForConfirm] = useState<string | null>(null);
+  // Real database hooks
+  const { data: requisitions = [], isLoading: isReqLoading } = useHospitalRequisitions();
+  const { data: bloodBanks = [] } = useRegisteredFacilities('BLOOD_BANK');
+  const createRequisition = useCreateHospitalRequisition();
+  const emergencyBroadcast = useEmergencyBroadcast();
 
-  // Hospital's multi-facility blood orders ledger
-  const [hospitalOrders, setHospitalOrders] = useState([
-    {
-      id: 'ord-101',
-      patientName: 'Kavitha M. (IP-4412)',
-      bloodGroup: 'O+',
-      component: 'PRBC (Packed Red Cells)',
-      unitsRequested: 3,
-      unitsReserved: 2,
-      unitsDelivered: 1,
-      urgency: 'EMERGENCY',
-      targetWard: 'Emergency OT 3',
-      targetTime: 'Within 2 hours',
-      status: 'ALLOCATION_IN_PROGRESS',
-      participatingBanks: [
-        { name: 'Red Cross Central', reserved: 2, status: 'RESERVED_SAFE' },
-        { name: 'Victoria Hospital BB', reserved: 0, status: 'AWAITING_STOCK' },
-      ],
-      escalated: false,
-    },
-    {
-      id: 'ord-102',
-      patientName: 'Devraj R. (IP-9801)',
-      bloodGroup: 'AB-',
-      component: 'Fresh Frozen Plasma (FFP)',
-      unitsRequested: 2,
-      unitsReserved: 2,
-      unitsDelivered: 2,
-      urgency: 'NORMAL',
-      targetWard: 'Hematology Day Care',
-      targetTime: 'Tomorrow morning',
-      status: 'READY_FOR_COLLECTION',
-      participatingBanks: [
-        { name: 'St. John’s Medical BB', reserved: 2, status: 'COLLECTION_CONFIRMED' },
-      ],
-      escalated: false,
-    },
-  ]);
+  // Modals state
+  const [isRequisitionOpen, setIsRequisitionOpen] = useState(false);
+  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
 
-  const quickActions = [
-    { label: 'Create Patient Request', action: () => setIsCreateOpen(true), desc: 'File emergency requirements for compatible blood units.', icon: <Plus className="w-5 h-5" /> },
-    { label: 'Search Bank Inventory', action: () => navigate('/inventory'), desc: 'Check compatible inventories and reserves across banks.', icon: <Search className="w-5 h-5" /> },
-    { label: 'Emergency Match Map', action: () => navigate('/emergency-map'), desc: 'View nearby blood banks and active donors in radius.', icon: <Building className="w-5 h-5" /> },
-    { label: 'Sponsor Donation Camp', action: () => navigate('/camps'), desc: 'Associate with blood drives to replenish regional reserves.', icon: <Calendar className="w-5 h-5" /> },
-  ];
+  // Requisition Form state
+  const [targetBankId, setTargetBankId] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('O_POS');
+  const [unitsRequired, setUnitsRequired] = useState(2);
+  const [urgency, setUrgency] = useState<'NORMAL' | 'EMERGENCY'>('NORMAL');
+  const [message, setMessage] = useState('');
 
-  const handleEscalate = (orderId: string) => {
-    setHospitalOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, escalated: true } : o))
-    );
-    toast.error('Emergency escalation dispatched to all regional blood banks and on-call coordinators!', {
-      duration: 5000,
-      icon: '🚨',
-    });
-  };
+  // Emergency Broadcast Form state
+  const [broadcastRadius, setBroadcastRadius] = useState(50);
+  const [broadcastGroup, setBroadcastGroup] = useState('O_POS');
+  const [broadcastUnits, setBroadcastUnits] = useState(3);
+  const [broadcastMsg, setBroadcastMsg] = useState('');
 
-  const handleConfirmFulfillment = () => {
-    if (selectedReqForConfirm) {
-      setHospitalOrders((prev) =>
-        prev.map((o) =>
-          o.id === selectedReqForConfirm
-            ? { ...o, status: 'FULFILLED', unitsDelivered: o.unitsRequested }
-            : o
-        )
-      );
-      toast.success('Fulfillment confirmed. Blood unit issued and request closed.');
-      setIsConfirmOpen(false);
-      setSelectedReqForConfirm(null);
-    }
-  };
+  // Active Donors Map Radius
+  const [mapRadius, setMapRadius] = useState(50);
+  const { data: activeDonors = [] } = useActiveDonorsForFacility(mapRadius);
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateRequisitionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsCreateOpen(false);
-    toast.success('Clinical Blood Request submitted. Dispatched to regional blood banks!');
-    setHospitalOrders((prev) => [
-      {
-        id: `ord-${Date.now()}`,
-        patientName: 'Emergency Trauma Patient (IP-5021)',
-        bloodGroup: 'O-',
-        component: 'Whole Blood',
-        unitsRequested: 2,
-        unitsReserved: 1,
-        unitsDelivered: 0,
-        urgency: 'EMERGENCY',
-        targetWard: 'Trauma Resuscitation Unit',
-        targetTime: 'Immediate (< 1 Hour)',
-        status: 'ALLOCATION_IN_PROGRESS',
-        participatingBanks: [
-          { name: 'Red Cross Central', reserved: 1, status: 'RESERVED_SAFE' },
-        ],
-        escalated: false,
-      },
-      ...prev,
-    ]);
+    if (!targetBankId) return;
+
+    await createRequisition.mutateAsync({
+      targetBloodBankId: targetBankId,
+      bloodGroup,
+      unitsRequired: Number(unitsRequired),
+      urgency,
+      message,
+    });
+
+    setIsRequisitionOpen(false);
+    setMessage('');
+  };
+
+  const handleEmergencyBroadcastSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    await emergencyBroadcast.mutateAsync({
+      bloodGroup: broadcastGroup,
+      unitsRequired: Number(broadcastUnits),
+      radiusKm: Number(broadcastRadius),
+      message: broadcastMsg,
+    });
+
+    setIsBroadcastOpen(false);
+    setBroadcastMsg('');
   };
 
   return (
-    <div className="space-y-8 text-slate-100">
-      {/* 1. Header with Verification Badge */}
+    <div className="space-y-8 text-slate-100 pb-12">
+      {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-rose-600 to-rose-400 text-white flex items-center justify-center shadow-lg shadow-rose-600/30">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-rose-600/30">
             <Building className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold tracking-tight text-white font-display">Hospital Blood Logistics</h2>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Licensed Hospital Facility
+              <h2 className="text-2xl font-bold tracking-tight text-white font-display">
+                Hospital Clinical Operations
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" /> Accredited Center
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Welcome back, {user?.fullName || 'Hospital Facility'}! Coordinate clinical transfusion orders and multi-bank allocations
+              Direct blood bank requisitions, 100km emergency donor radar, and live transfusion tracking
             </p>
           </div>
         </div>
 
-        <Button variant="primary" onClick={() => setIsCreateOpen(true)} className="flex items-center gap-1.5">
-          <Plus className="w-4 h-4" /> Create Clinical Request
-        </Button>
-      </div>
-
-      {/* 2. Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {data?.metrics.map((m, idx) => (
-          <div
-            key={idx}
-            className="p-6 bg-slate-900/30 backdrop-blur-xl border border-slate-800/80 rounded-2xl shadow-xl space-y-2 hover:border-slate-800 transition-all group"
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setIsBroadcastOpen(true)}
+            className="flex items-center gap-2 border-rose-500/30 text-rose-300 hover:bg-rose-950/20"
           >
-            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{m.label}</span>
-            <span className="block text-3xl font-extrabold text-white font-display tracking-tight group-hover:text-rose-500 transition-colors">
-              {isLoading ? '...' : m.value}
-            </span>
-            {m.change && (
-              <span
-                className={`block text-xs font-semibold ${
-                  m.changeType === 'success'
-                    ? 'text-emerald-500'
-                    : m.changeType === 'warning'
-                    ? 'text-amber-500'
-                    : 'text-slate-400'
-                }`}
-              >
-                {m.change}
-              </span>
-            )}
-          </div>
-        ))}
+            <Radio className="w-4 h-4 text-rose-500 animate-pulse" />
+            Emergency SOS Radar
+          </Button>
+
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (bloodBanks.length > 0 && !targetBankId) {
+                setTargetBankId(bloodBanks[0].id);
+              }
+              setIsRequisitionOpen(true);
+            }}
+            className="flex items-center gap-2 shadow-lg shadow-rose-600/30"
+          >
+            <Plus className="w-4 h-4" />
+            Raise Blood Requisition
+          </Button>
+        </div>
       </div>
 
-      {/* 3. Multi-Facility Requests & Allocation Tracking */}
+      {/* 2. Top Stats Overview */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400">Active Requisitions</span>
+            <Clock className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-bold text-white font-display">
+            {requisitions.filter((r) => r.status === 'PENDING' || r.status === 'APPROVED').length}
+          </div>
+          <span className="text-[10px] text-slate-500">Awaiting or in allocation</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400">Fulfilled Units</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-bold text-emerald-400 font-display">
+            {requisitions.reduce((acc, curr) => acc + (curr.allocatedUnits || 0), 0)}
+          </div>
+          <span className="text-[10px] text-slate-500">Received from partner banks</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400">Partner Blood Banks</span>
+            <Building className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div className="text-2xl font-bold text-white font-display">{bloodBanks.length}</div>
+          <span className="text-[10px] text-slate-500">Connected in network</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400">Active Donors in Radius</span>
+            <Users className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="text-2xl font-bold text-rose-400 font-display">{activeDonors.length}</div>
+          <span className="text-[10px] text-slate-500">Within {mapRadius} km ready to donate</span>
+        </div>
+      </div>
+
+      {/* 3. Requisitions Ledger */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-            <Flame className="w-5 h-5 text-rose-500" />
-            Clinical Blood Orders & Multi-Bank Allocation Ledger
-          </h3>
-          <span className="text-xs text-slate-400">
-            {hospitalOrders.filter((o) => o.status !== 'FULFILLED').length} active clinical requests
-          </span>
+          <div>
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <Flame className="w-5 h-5 text-rose-500" />
+              Hospital Requisitions Ledger
+            </h3>
+            <p className="text-xs text-slate-400">
+              Live hospital blood orders sent directly to registered blood banks
+            </p>
+          </div>
+          <span className="text-xs text-slate-500">Auto-synced via real-time DB</span>
         </div>
 
-        <div className="space-y-4">
-          {hospitalOrders.map((ord) => (
-            <div
-              key={ord.id}
-              className={`p-6 rounded-3xl border transition-all space-y-5 ${
-                ord.escalated
-                  ? 'border-rose-500 bg-rose-950/20 shadow-xl shadow-rose-950/40 animate-pulse'
-                  : ord.status === 'FULFILLED'
-                  ? 'border-slate-800 bg-slate-950/40 opacity-70'
-                  : 'border-slate-800 bg-slate-900/40 backdrop-blur-xl shadow-xl'
-              }`}
+        {isReqLoading ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading requisitions...</div>
+        ) : requisitions.length === 0 ? (
+          <div className="p-10 rounded-2xl border border-slate-800 bg-slate-900/20 text-center space-y-3">
+            <AlertOctagon className="w-10 h-10 text-slate-600 mx-auto" />
+            <h4 className="text-sm font-bold text-slate-300">No active requisitions raised yet</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Raise a direct blood requisition ticket to any registered blood bank to reserve units.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setIsRequisitionOpen(true)}
+              className="text-xs"
             >
-              {/* Top row */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-sm font-bold text-white">{ord.patientName}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        ord.urgency === 'EMERGENCY'
-                          ? 'bg-rose-500 text-white animate-pulse'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {ord.urgency}
-                    </span>
-                    {ord.escalated && (
-                      <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-black uppercase tracking-wider">
-                        🚨 Escalated to High Priority
+              Raise Requisition
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/30">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950/60 border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Ticket Ref</th>
+                  <th className="py-3 px-4">Target Blood Bank</th>
+                  <th className="py-3 px-4">Blood Group</th>
+                  <th className="py-3 px-4">Quantity</th>
+                  <th className="py-3 px-4">Urgency</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Blood Bank Response</th>
+                  <th className="py-3 px-4">Date Raised</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-medium">
+                {requisitions.map((req) => (
+                  <tr key={req.id} className="hover:bg-slate-800/20 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-rose-400">
+                      #{req.id.slice(0, 8)}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-200">
+                        {req.targetBloodBank?.name || req.allocatedBloodBank?.name || 'Broadcast Pool'}
+                      </div>
+                      {req.targetBloodBank?.phone && (
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <Phone className="w-3 h-3" /> {req.targetBloodBank.phone}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 font-bold border border-rose-500/20">
+                        {req.bloodGroup.replace('_', '+')}
                       </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    Required: <strong className="text-rose-400">{ord.unitsRequested} Units</strong> of{' '}
-                    <strong className="text-white">{ord.bloodGroup}</strong> ({ord.component}) • Target: {ord.targetWard}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {!ord.escalated && ord.status !== 'FULFILLED' && (
-                    <button
-                      onClick={() => handleEscalate(ord.id)}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 text-xs font-bold transition-all flex items-center gap-1.5"
-                      title="Escalate if unanswered beyond threshold"
-                    >
-                      <AlertOctagon className="w-3.5 h-3.5" /> Emergency Escalation
-                    </button>
-                  )}
-                  {ord.status !== 'FULFILLED' && (
-                    <button
-                      onClick={() => {
-                        setSelectedReqForConfirm(ord.id);
-                        setIsConfirmOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/30"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Confirm Receipt & Close
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Allocation Breakdown across blood banks */}
-              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2 text-xs">
-                {ord.participatingBanks.map((bank, i) => (
-                  <div
-                    key={i}
-                    className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-200 block">{bank.name}</span>
-                      <span className="text-[10px] text-slate-400">Reserved: {bank.reserved} Units</span>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        bank.reserved > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-500'
-                      }`}
-                    >
-                      {bank.status}
-                    </span>
-                  </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-bold text-white">{req.allocatedUnits}</span> /{' '}
+                      {req.unitsRequired} Units
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          req.urgency === 'EMERGENCY'
+                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {req.urgency}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          req.status === 'FULFILLED'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : req.status === 'APPROVED'
+                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            : req.status === 'CANCELLED'
+                            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}
+                      >
+                        {req.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 max-w-xs truncate text-[11px] text-slate-400">
+                      {req.responseNotes || (
+                        <span className="italic text-slate-600">Awaiting bank review...</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-slate-500">
+                      {new Date(req.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
                 ))}
-              </div>
-
-              {/* Status footer */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-500" /> Required by: {ord.targetTime}
-                </span>
-                <span className="font-bold text-slate-300">
-                  Total Delivered: {ord.unitsDelivered} / {ord.unitsRequested} Units
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* 4. Analytics & Logistics Overview Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Quick Actions */}
-        <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-lg font-bold text-white font-display">Logistics Directory</h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {quickActions.map((action, idx) => (
-              <div
-                key={idx}
-                onClick={action.action}
-                className="p-5 rounded-2xl border border-slate-800/60 bg-slate-900/10 hover:bg-slate-900/30 hover:border-rose-500/20 transition-all flex gap-4 group cursor-pointer"
+      {/* 4. Real-Time Emergency Map for Hospital (Shows ACTIVE DONORS within Radius) */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <Radio className="w-5 h-5 text-rose-500 animate-pulse" />
+              Active Voluntary Donors within Emergency Radius
+            </h3>
+            <p className="text-xs text-slate-400">
+              Real-time map showing verified donors who have marked themselves as Active (not other hospitals)
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-semibold">Radius:</span>
+            {[10, 25, 50, 100].map((r) => (
+              <button
+                key={r}
+                onClick={() => setMapRadius(r)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  mapRadius === r
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
-                <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-800 border border-slate-700/80 text-rose-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  {action.icon}
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{action.label}</h4>
-                  <p className="text-xs text-slate-500 leading-normal">{action.desc}</p>
-                </div>
-              </div>
+                {r} km
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Clinical Transfusion Analytics */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold text-white font-display">Transfusion Analytics</h3>
-          <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/20 space-y-4 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Fulfillment Success Rate</span>
-              <span className="font-extrabold text-emerald-400 text-sm">96.4%</span>
-            </div>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div className="bg-emerald-500 h-full rounded-full" style={{ width: '96.4%' }} />
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-slate-400">Average Bank Response Time</span>
-              <span className="font-bold text-white">18 Minutes</span>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-slate-400">Zero-Loss FEFO Adherence</span>
-              <span className="font-bold text-emerald-400">100%</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[10px] text-slate-400 leading-relaxed">
-              Clinical compatibility cross-matching must be documented and signed by the attending pathologist prior to infusion.
-            </div>
+        <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/30 space-y-4">
+          <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800/60 pb-3">
+            <span>
+              Found <strong className="text-rose-400">{activeDonors.length} active donors</strong> within{' '}
+              {mapRadius} km
+            </span>
+            <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Live Radar Active
+            </span>
           </div>
+
+          {activeDonors.length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-500">
+              No active donors currently registered within {mapRadius} km. Try expanding radius to 100 km.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activeDonors.map((donor) => (
+                <div
+                  key={donor.id}
+                  className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start justify-between gap-3 hover:border-slate-700 transition-all"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs">{donor.fullName}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold text-[10px]">
+                        {donor.bloodGroup.replace('_', '+')}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-slate-500" />
+                      <span>{donor.distanceKm} km from hospital</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active & Eligible
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBroadcastGroup(donor.bloodGroup);
+                      setIsBroadcastOpen(true);
+                    }}
+                    className="text-[10px] py-1 px-2.5 shrink-0"
+                  >
+                    Alert
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 5. Create Clinical Request Modal */}
-      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create Clinical Patient Blood Order">
-        <form onSubmit={handleCreateSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Patient Name / IP Identifier *</label>
-              <input
-                type="text"
-                defaultValue="Suma N. (IP-6102)"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Target Ward / OT *</label>
-              <input
-                type="text"
-                defaultValue="Emergency OT 2"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
-                required
-              />
-            </div>
+      {/* 5. Modal: Raise Requisition to Blood Bank */}
+      <Modal
+        isOpen={isRequisitionOpen}
+        onClose={() => setIsRequisitionOpen(false)}
+        title="Raise Blood Requisition to Blood Bank"
+      >
+        <form onSubmit={handleCreateRequisitionSubmit} className="space-y-4 text-xs">
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">Target Blood Bank</label>
+            <select
+              value={targetBankId}
+              onChange={(e) => setTargetBankId(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
+              required
+            >
+              {bloodBanks.map((bb) => (
+                <option key={bb.id} value={bb.id}>
+                  {bb.name} • {bb.city} ({bb.phone})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Blood Group *</label>
-              <select className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none">
-                <option value="O_NEG">O Negative (O-) Universal</option>
-                <option value="O_POS">O Positive (O+)</option>
-                <option value="A_POS">A Positive (A+)</option>
-                <option value="B_POS">B Positive (B+)</option>
-                <option value="AB_POS">AB Positive (AB+)</option>
+              <label className="block text-slate-300 font-semibold mb-1">Blood Group Required</label>
+              <select
+                value={bloodGroup}
+                onChange={(e) => setBloodGroup(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
+              >
+                {['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG', 'O_POS', 'O_NEG'].map(
+                  (bg) => (
+                    <option key={bg} value={bg}>
+                      {bg.replace('_', '+')}
+                    </option>
+                  )
+                )}
               </select>
             </div>
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Component *</label>
-              <select className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none">
-                <option value="PRBC">Packed Red Blood Cells (PRBC)</option>
-                <option value="WHOLE_BLOOD">Whole Blood</option>
-                <option value="PLATELETS">Single Donor Platelets (SDP)</option>
-                <option value="PLASMA">Fresh Frozen Plasma (FFP)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Units Required *</label>
+              <label className="block text-slate-300 font-semibold mb-1">Units Count</label>
               <input
                 type="number"
                 min="1"
-                max="10"
-                defaultValue={2}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
+                max="20"
+                value={unitsRequired}
+                onChange={(e) => setUnitsRequired(Number(e.target.value))}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Urgency Priority *</label>
-              <select className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none">
-                <option value="EMERGENCY">EMERGENCY (Critical Surgeries)</option>
-                <option value="NORMAL">NORMAL (Scheduled Transfusions)</option>
-              </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-400 font-semibold mb-1">Required By Timestamp *</label>
-            <input
-              type="datetime-local"
-              defaultValue={new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 16)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
-              required
+            <label className="block text-slate-300 font-semibold mb-1">Urgency</label>
+            <div className="grid grid-cols-2 gap-3">
+              <label
+                className={`p-3 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                  urgency === 'NORMAL'
+                    ? 'border-indigo-500 bg-indigo-950/20 text-white'
+                    : 'border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="urgency"
+                  checked={urgency === 'NORMAL'}
+                  onChange={() => setUrgency('NORMAL')}
+                  className="hidden"
+                />
+                <span className="font-bold">Normal (Elective/Routine)</span>
+              </label>
+
+              <label
+                className={`p-3 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                  urgency === 'EMERGENCY'
+                    ? 'border-rose-500 bg-rose-950/30 text-rose-300'
+                    : 'border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="urgency"
+                  checked={urgency === 'EMERGENCY'}
+                  onChange={() => setUrgency('EMERGENCY')}
+                  className="hidden"
+                />
+                <span className="font-bold flex items-center gap-1">
+                  <Flame className="w-4 h-4 text-rose-500" /> Emergency (Immediate)
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">
+              Clinical Notes / Patient Case Ref (Optional)
+            </label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="e.g. Patient undergoing emergency cardiovascular surgery in OT-2."
+              rows={3}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none resize-none"
             />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" type="button" onClick={() => setIsCreateOpen(false)}>
+            <Button variant="outline" type="button" onClick={() => setIsRequisitionOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" className="flex items-center gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Dispatch Order
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={createRequisition.isPending}
+              className="flex items-center gap-1.5"
+            >
+              <Send className="w-3.5 h-3.5" />
+              {createRequisition.isPending ? 'Sending Requisition...' : 'Dispatch Requisition Ticket'}
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* 6. Confirm Receipt & Close Modal */}
-      <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="Confirm Blood Delivery & Close Order">
-        <div className="space-y-4 text-xs">
-          <p className="text-slate-300 leading-relaxed">
-            Record the successful receipt of the cold-chain blood units from the courier. Closing the request marks all allocated units as safely transferred.
-          </p>
+      {/* 6. Modal: Emergency SOS Broadcast to Donors */}
+      <Modal
+        isOpen={isBroadcastOpen}
+        onClose={() => setIsBroadcastOpen(false)}
+        title="Broadcast Emergency Donor SOS (100km Radar)"
+      >
+        <form onSubmit={handleEmergencyBroadcastSubmit} className="space-y-4 text-xs">
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
+            <strong>When blood banks have no stock:</strong> This will broadcast real-time in-app
+            and push notifications directly to voluntary active donors registered within your selected
+            radius.
+          </div>
+
           <div>
-            <label className="block text-slate-400 font-semibold mb-1">Verified Clinical Batch Number</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-slate-300 font-semibold">Broadcast Radius Distance</label>
+              <span className="font-mono font-bold text-rose-400 text-sm">{broadcastRadius} km</span>
+            </div>
             <input
-              type="text"
-              defaultValue="BATCH-LL-2026-9041"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none font-mono"
+              type="range"
+              min="5"
+              max="100"
+              step="5"
+              value={broadcastRadius}
+              onChange={(e) => setBroadcastRadius(Number(e.target.value))}
+              className="w-full accent-rose-500"
+            />
+            <div className="flex justify-between text-[10px] text-slate-500">
+              <span>5 km (Immediate local)</span>
+              <span>50 km (City-wide)</span>
+              <span>100 km (Inter-district)</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Blood Group Needed</label>
+              <select
+                value={broadcastGroup}
+                onChange={(e) => setBroadcastGroup(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
+              >
+                {['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG', 'O_POS', 'O_NEG'].map(
+                  (bg) => (
+                    <option key={bg} value={bg}>
+                      {bg.replace('_', '+')}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Required Units</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={broadcastUnits}
+                onChange={(e) => setBroadcastUnits(Number(e.target.value))}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">Emergency Message to Donors</label>
+            <textarea
+              value={broadcastMsg}
+              onChange={(e) => setBroadcastMsg(e.target.value)}
+              placeholder="Urgent trauma requirement at hospital. Donors can report directly to Blood Center on Ground Floor."
+              rows={3}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 outline-none resize-none"
             />
           </div>
-          <div>
-            <label className="block text-slate-400 font-semibold mb-1">Receiving Transfusion Nurse / Doctor</label>
-            <input
-              type="text"
-              defaultValue={user?.fullName || 'Dr. Transfusion Officer'}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none"
-            />
-          </div>
+
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setIsConfirmOpen(false)}>
-              Back
+            <Button variant="outline" type="button" onClick={() => setIsBroadcastOpen(false)}>
+              Cancel
             </Button>
-            <Button variant="primary" onClick={handleConfirmFulfillment} className="bg-emerald-600 hover:bg-emerald-500">
-              Confirm Receipt
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={emergencyBroadcast.isPending}
+              className="bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5"
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              {emergencyBroadcast.isPending
+                ? 'Broadcasting to Donors...'
+                : `Broadcast to ${broadcastRadius}km Radius`}
             </Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   );
 };
+
 export default HospitalDashboard;
