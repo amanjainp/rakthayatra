@@ -199,10 +199,32 @@ export const LifeLinkChatbot: React.FC = () => {
         throw new Error('Unexpected response structure');
       }
     } catch {
-      // Smart offline fallback
-      const fallbackReply = language === 'kn'
-        ? 'ಕ್ಷಮಿಸಿ, ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. ತುರ್ತು ರಕ್ತದ ಅಗತ್ಯವಿದ್ದರೆ ದಯವಿಟ್ಟು 108 ಅಥವಾ 104 ಗೆ ಕರೆ ಮಾಡಿ.'
-        : 'I am currently operating with local intelligence. If you require urgent emergency blood, please call national helpline **108** or state blood cell **104** immediately.';
+      // Smart contextual fallback when offline or during network latency
+      const lower = textToSend.toLowerCase().trim();
+      let fallbackReply = '';
+      let fallbackActions = [
+        { label: 'Find Blood Online', action: 'NAVIGATE' as const, payload: '/#find-blood' },
+        { label: 'Donation Eligibility', action: 'QUERY' as const, payload: 'Who is eligible to donate blood?' },
+        { label: 'Emergency Helplines', action: 'QUERY' as const, payload: 'Emergency helpline numbers' },
+      ];
+
+      if (lower === 'hi' || lower === 'hello' || lower === 'hey' || lower.includes('namaste') || lower.includes('ನಮಸ್ಕಾರ')) {
+        fallbackReply = language === 'kn'
+          ? 'ನಮಸ್ಕಾರ! ನಾನು **LifeLink (Rakthayatra)** ಎಐ ಸಹಾಯಕ. ನೀವು ರಕ್ತ ಹುಡುಕಲು, ದಾನ ಮಾಡಲು, ಅರ್ಹತೆ ಪರಿಶೀಲಿಸಲು ಅಥವಾ ತುರ್ತು ಮಾಹಿತಿ ಪಡೆಯಲು ಕೇಳಬಹುದು.'
+          : 'Hello! I am your **LifeLink (Rakthayatra) AI Assistant**. I can help you search compatible blood stock, understand donation eligibility, book appointments, or file emergency requests.\n\nHow can I help you today?';
+      } else if (lower.includes('eligible') || lower.includes('who can donate') || lower.includes('weight') || lower.includes('age')) {
+        fallbackReply = language === 'kn'
+          ? 'ರಕ್ತದಾನದ ಮೂಲ ಮಾನದಂಡಗಳು:\n- ವಯಸ್ಸು: 18 - 65 ವರ್ಷಗಳು\n- ತೂಕ: ಕನಿಷ್ಠ 45 ಕೆಜಿ\n- ಹಿಮೋಗ್ಲೋಬಿನ್: ಕನಿಷ್ಠ 12.5 g/dL\n- ದಾನದ ನಡುವಿನ ಅಂತರ: ಪುರುಷರಿಗೆ 90 ದಿನಗಳು, ಮಹಿಳೆಯರಿಗೆ 120 ದಿನಗಳು.'
+          : 'Basic Blood Donor Eligibility Criteria:\n- Age: 18 – 65 years\n- Weight: Minimum 45 kg\n- Hemoglobin: At least 12.5 g/dL\n- Interval: 90 days for men, 120 days for women.\n\nEnsure you are well-hydrated and have had a light meal before donating.';
+      } else if (lower.includes('emergency') || lower.includes('urgent') || lower.includes('108') || lower.includes('104')) {
+        fallbackReply = language === 'kn'
+          ? 'ತುರ್ತು ಸಹಾಯವಾಣಿಗಳು:\n- ರಾಷ್ಟ್ರೀಯ ಆಂಬ್ಯುಲೆನ್ಸ್: **108**\n- ರಕ್ತ ಸಹಾಯವಾಣಿ: **104**\n- ತಕ್ಷಣದ ತುರ್ತು ರಕ್ತಕ್ಕಾಗಿ ಲೈಫ್‌ಲಿಂಕ್‌ನಲ್ಲಿ Emergency Blood Request ಸಲ್ಲಿಸಿ.'
+          : '🚨 **24/7 Emergency Helplines:**\n- **National Ambulance:** **108**\n- **State Blood Cell:** **104**\n- **Emergency Dispatch:** File an **EMERGENCY** request on LifeLink to alert all nearby blood banks and active donors within 100km immediately.';
+      } else {
+        fallbackReply = language === 'kn'
+          ? 'ನಾನು ರಿಯಲ್-ಟೈಮ್‌ನಲ್ಲಿ ರಕ್ತ ಹುಡುಕಾಟ, ದಾನಿಗಳ ಹೊಂದಾಣಿಕೆ ಮತ್ತು ತುರ್ತು ಮಾಹಿತಿಗೆ ಸಹಾಯ ಮಾಡಬಲ್ಲೆ. ಹೆಚ್ಚಿನ ವಿವರಗಳಿಗೆ ದಯವಿಟ್ಟು 108 ಅಥವಾ 104 ಗೆ ಕರೆ ಮಾಡಿ.'
+          : 'I can assist you with live blood inventory searches, voluntary donor matching, scheduled appointments, and emergency logistics. If you need immediate clinical assistance, please call 108 or 104.';
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -212,10 +234,7 @@ export const LifeLinkChatbot: React.FC = () => {
           text: fallbackReply,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           language,
-          suggestedActions: [
-            { label: 'Emergency Map', action: 'NAVIGATE', payload: '/emergency-map' },
-            { label: 'Find Blood', action: 'NAVIGATE', payload: '/#find-blood' },
-          ],
+          suggestedActions: fallbackActions,
         },
       ]);
     } finally {

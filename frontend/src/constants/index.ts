@@ -25,11 +25,7 @@ const normalizeApiUrl = (url: string): string => {
 
   // 1. If running in a browser on Render (*.onrender.com)
   if (typeof window !== 'undefined' && window.location?.hostname?.includes('.onrender.com')) {
-    const stripped = trimmed.replace(/^https?:\/\//i, '');
-    if (!stripped.includes('.') || stripped.includes('localhost') || !trimmed) {
-      const backendHostname = window.location.hostname.replace('-frontend', '-backend');
-      trimmed = `https://${backendHostname}`;
-    }
+    trimmed = 'https://rakthayatra-backend.onrender.com';
   }
 
   // 2. If host is an internal service name without dots (e.g. 'rakthayatra-backend') and not localhost
