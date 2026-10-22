@@ -6,14 +6,12 @@ export const USER_KEY = 'll_user';
 
 let rawBaseUrl = 'http://localhost:5000/api';
 try {
-  if (typeof (import.meta as any) !== 'undefined' && (import.meta as any).env?.VITE_API_URL) {
-    rawBaseUrl = (import.meta as any).env.VITE_API_URL;
-  } else {
-    const envGetter = new Function('return import.meta.env');
-    const env = envGetter();
-    if (env && env.VITE_API_URL) {
-      rawBaseUrl = env.VITE_API_URL;
-    }
+  const getImportMetaEnv = new Function('try { return import.meta.env; } catch { return undefined; }');
+  const env = getImportMetaEnv();
+  if (env && env.VITE_API_URL) {
+    rawBaseUrl = env.VITE_API_URL;
+  } else if (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) {
+    rawBaseUrl = process.env.VITE_API_URL;
   }
 } catch {
   if (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) {
@@ -26,7 +24,7 @@ const normalizeApiUrl = (url: string): string => {
   let trimmed = url ? url.trim().replace(/\/+$/, '') : '';
 
   // 1. If running in a browser on Render (*.onrender.com)
-  if (typeof window !== 'undefined' && window.location.hostname.includes('.onrender.com')) {
+  if (typeof window !== 'undefined' && window.location?.hostname?.includes('.onrender.com')) {
     const stripped = trimmed.replace(/^https?:\/\//i, '');
     if (!stripped.includes('.') || stripped.includes('localhost') || !trimmed) {
       const backendHostname = window.location.hostname.replace('-frontend', '-backend');
