@@ -51,7 +51,10 @@ export class NotificationController {
    */
   async markAsRead(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.userId || (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
       const { id } = req.params;
 
       const notification = await prisma.notification.findUnique({
@@ -83,7 +86,7 @@ export class NotificationController {
    */
   async markAllAsRead(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as any).user?.userId || (req as any).user?.id;
       if (!userId) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
       }

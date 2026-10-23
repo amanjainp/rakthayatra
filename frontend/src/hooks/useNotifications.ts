@@ -48,12 +48,17 @@ export const useNotifications = () => {
       // Return context containing previous snapshot
       return { previousNotifications };
     },
-    onError: (_err, _id, context) => {
+    onError: (err: any, _id, context) => {
       // Rollback to previous state on failure
       if (context?.previousNotifications) {
         queryClient.setQueryData(['notifications'], context.previousNotifications);
       }
-      toast.error('Failed to update notification status');
+      const message =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        err?.message ||
+        'Failed to update notification status';
+      toast.error(message);
     },
     onSettled: () => {
       // Invalidate query to sync with server state
@@ -76,10 +81,19 @@ export const useNotifications = () => {
 
       return { previousNotifications };
     },
-    onError: (_err, _variables, context) => {
+    onSuccess: () => {
+      toast.success('All notifications marked as read');
+    },
+    onError: (err: any, _variables, context) => {
       if (context?.previousNotifications) {
         queryClient.setQueryData(['notifications'], context.previousNotifications);
       }
+      const message =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        err?.message ||
+        'Failed to mark all notifications as read';
+      toast.error(message);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });

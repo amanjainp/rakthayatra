@@ -101,7 +101,7 @@ router.get('/active-donors', async (req: Request, res: Response) => {
       authenticate(req as any, res, (err: any) => (err ? reject(err) : resolve()));
     });
 
-    const userId = (req as any).user?.id;
+    const userId = (req as any).user?.userId || (req as any).user?.id;
     const radius = parseFloat((req.query.radius as string) || '100');
     const bloodGroup = req.query.bloodGroup as string | undefined;
 

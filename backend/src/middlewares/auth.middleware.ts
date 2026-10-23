@@ -31,6 +31,7 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
   }
 
   req.user = payload;
+  (req.user as any).id = payload.userId;
   return next();
 }
 
