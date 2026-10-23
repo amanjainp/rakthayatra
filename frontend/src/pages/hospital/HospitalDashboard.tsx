@@ -56,30 +56,38 @@ export const HospitalDashboard: React.FC = () => {
     e.preventDefault();
     if (!targetBankId) return;
 
-    await createRequisition.mutateAsync({
-      targetBloodBankId: targetBankId,
-      bloodGroup,
-      unitsRequired: Number(unitsRequired),
-      urgency,
-      message,
-    });
+    try {
+      await createRequisition.mutateAsync({
+        targetBloodBankId: targetBankId,
+        bloodGroup,
+        unitsRequired: Number(unitsRequired),
+        urgency,
+        message,
+      });
 
-    setIsRequisitionOpen(false);
-    setMessage('');
+      setIsRequisitionOpen(false);
+      setMessage('');
+    } catch {
+      // Handled by createRequisition onError toast
+    }
   };
 
   const handleEmergencyBroadcastSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    await emergencyBroadcast.mutateAsync({
-      bloodGroup: broadcastGroup,
-      unitsRequired: Number(broadcastUnits),
-      radiusKm: Number(broadcastRadius),
-      message: broadcastMsg,
-    });
+    try {
+      await emergencyBroadcast.mutateAsync({
+        bloodGroup: broadcastGroup,
+        unitsRequired: Number(broadcastUnits),
+        radiusKm: Number(broadcastRadius),
+        message: broadcastMsg,
+      });
 
-    setIsBroadcastOpen(false);
-    setBroadcastMsg('');
+      setIsBroadcastOpen(false);
+      setBroadcastMsg('');
+    } catch {
+      // Handled by emergencyBroadcast onError toast
+    }
   };
 
   return (

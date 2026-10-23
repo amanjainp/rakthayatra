@@ -2,6 +2,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
 
+const getErrorMessage = (err: any, fallback: string): string => {
+  const apiError = err?.response?.data?.error;
+  if (apiError) {
+    if (typeof apiError === 'string') return apiError;
+    if (typeof apiError === 'object' && apiError.message) return apiError.message;
+  }
+  if (err?.response?.data?.message && typeof err.response.data.message === 'string') {
+    return err.response.data.message;
+  }
+  if (err?.message && typeof err.message === 'string') {
+    return err.message;
+  }
+  return fallback;
+};
+
 export interface RegisteredFacility {
   id: string;
   name: string;
@@ -196,7 +211,7 @@ export const useCreateHospitalRequisition = () => {
       toast.success('Requisition raised to blood bank successfully!');
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to raise blood requisition');
+      toast.error(getErrorMessage(err, 'Failed to raise blood requisition'));
     },
   });
 };
@@ -221,7 +236,7 @@ export const useEmergencyBroadcast = () => {
       );
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to broadcast emergency alert');
+      toast.error(getErrorMessage(err, 'Failed to broadcast emergency alert'));
     },
   });
 };
@@ -266,7 +281,7 @@ export const useProcessRequisition = () => {
       }
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to process requisition');
+      toast.error(getErrorMessage(err, 'Failed to process requisition'));
     },
   });
 };
@@ -303,7 +318,7 @@ export const useBookAppointment = () => {
       toast.success('Donation appointment scheduled successfully!');
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to book appointment');
+      toast.error(getErrorMessage(err, 'Failed to book appointment'));
     },
   });
 };
@@ -329,7 +344,7 @@ export const useUpdateAppointmentStatus = () => {
       }
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to update appointment');
+      toast.error(getErrorMessage(err, 'Failed to update appointment'));
     },
   });
 };
@@ -385,7 +400,7 @@ export const useRespondEmergencyAlert = () => {
       }
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to send response');
+      toast.error(getErrorMessage(err, 'Failed to send response'));
     },
   });
 };

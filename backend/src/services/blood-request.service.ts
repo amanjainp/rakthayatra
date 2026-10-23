@@ -636,7 +636,7 @@ export class BloodRequestService {
     await prisma.notification.create({
       data: {
         userId: bloodBank.userId,
-        title: `🏥 New Requisition from ${hospital.name}`,
+        title: `[REQUISITION] New Requisition from ${hospital.name}`,
         message: `${hospital.name} has requested ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')} (${urgency}). Requisition #${requisition.id.slice(0, 8)}.`,
         type: 'EMERGENCY_ALERT',
       },
@@ -695,7 +695,7 @@ export class BloodRequestService {
       await prisma.notification.create({
         data: {
           userId: request.requesterId,
-          title: `✅ Requisition #${requestId.slice(0, 8)} Accepted by ${bloodBank.name}`,
+          title: `[ACCEPTED] Requisition #${requestId.slice(0, 8)} Accepted by ${bloodBank.name}`,
           message: `${bloodBank.name} has allocated ${allocatedUnits} units of ${request.bloodGroup.replace('_', '+')}. Note: ${response.responseNotes || 'Ready for collection.'}`,
           type: 'REQUEST_UPDATE',
         },
@@ -716,7 +716,7 @@ export class BloodRequestService {
       await prisma.notification.create({
         data: {
           userId: request.requesterId,
-          title: `❌ Requisition #${requestId.slice(0, 8)} Declined by ${bloodBank.name}`,
+          title: `[DECLINED] Requisition #${requestId.slice(0, 8)} Declined by ${bloodBank.name}`,
           message: `${bloodBank.name} was unable to fulfill your request for ${request.bloodGroup.replace('_', '+')}. Reason: ${response.responseNotes || 'Out of stock'}. Consider broadcasting an emergency alert to active donors.`,
           type: 'REQUEST_UPDATE',
         },
@@ -796,7 +796,7 @@ export class BloodRequestService {
         await prisma.notification.create({
           data: {
             userId: donor.userId,
-            title: `🚨 EMERGENCY: Blood Urgently Needed at ${hospital.name}`,
+            title: `[EMERGENCY] Blood Urgently Needed at ${hospital.name}`,
             message: `${hospital.name} (${distance.toFixed(1)} km away) urgently requires ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')}. Please open your dashboard to respond!`,
             type: 'EMERGENCY_ALERT',
           },
@@ -848,7 +848,7 @@ export class BloodRequestService {
       await prisma.notification.create({
         data: {
           userId: request.requesterId,
-          title: `🩸 Donor Accepted Alert: ${donor.fullName}`,
+          title: `[DONOR ACCEPTED] Alert: ${donor.fullName}`,
           message: `Voluntary donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}, Phone: ${donor.phone}) has accepted your emergency request #${requestId.slice(0, 8)} and is coming to donate!`,
           type: 'REQUEST_UPDATE',
         },
@@ -858,7 +858,7 @@ export class BloodRequestService {
       await prisma.notification.create({
         data: {
           userId: donorUserId,
-          title: `🙏 Thank You for Answering the Call!`,
+          title: `Thank You for Answering the Call!`,
           message: `Your willingness to donate for ${request.locationName} has been communicated to the hospital. Venue: ${request.locationName}.`,
           type: 'DONATION_REMINDER',
         },
