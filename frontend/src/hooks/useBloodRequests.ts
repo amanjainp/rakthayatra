@@ -138,6 +138,22 @@ export const useBloodRequests = (filters?: { status?: string }) => {
     },
   });
 
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiClient.delete(`/requests/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bloodRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
+      toast.success('Blood request deleted successfully');
+    },
+    onError: (err: any) => {
+      const errMsg = err?.response?.data?.error?.message || err?.message || 'Failed to delete blood request.';
+      toast.error(`Error: ${errMsg}`);
+    },
+  });
+
   return {
     ...query,
     createRequest: createRequestMutation.mutateAsync,
@@ -146,5 +162,7 @@ export const useBloodRequests = (filters?: { status?: string }) => {
     rejectRequest: rejectRequestMutation.mutateAsync,
     fulfillRequest: fulfillRequestMutation.mutateAsync,
     cancelRequest: cancelRequestMutation.mutateAsync,
+    deleteRequest: deleteRequestMutation.mutateAsync,
+    isDeletingRequest: deleteRequestMutation.isPending,
   };
 };

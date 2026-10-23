@@ -9,6 +9,7 @@ const mockFindMany = jest.fn();
 const mockCount = jest.fn();
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
+const mockDelete = jest.fn();
 const mockUpdateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
 const mockCreateMany = jest.fn().mockImplementation(() => ({ count: 1 }));
 
@@ -32,6 +33,7 @@ jest.mock('@prisma/client', () => {
       count: (...args: any) => mockCount(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      delete: (...args: any) => mockDelete(...args),
       updateMany: (...args: any) => mockUpdateMany(...args),
     },
     auditLog: {
@@ -206,6 +208,87 @@ describe('Blood Request Module API Endpoint Tests', () => {
       expect(response.status).toBe(403);
       expect(response.body.success).toBe(false);
       expect(response.body.error.message).toContain('do not have permission');
+    });
+  });
+
+  describe('DELETE /api/requests/:id (Delete Request)', () => {
+    it('should successfully delete blood request when called by the requester', async () => {
+      const requestId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
+
+      mockFindUnique.mockResolvedValue({
+        id: requestId,
+        requesterId: 'patient-usr-1',
+        bloodGroup: 'B_POS',
+        unitsRequired: 2,
+        urgency: 'NORMAL',
+        status: 'PENDING',
+      });
+
+      mockDelete.mockResolvedValue({
+        id: requestId,
+        status: 'PENDING',
+      });
+
+      const response = await request(app)
+        .delete(`/api/requests/${requestId}`)
+        .set('Authorization', `Bearer ${patientToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toContain('deleted successfully');
+    });
+
+    it('should successfully delete blood request when called by an ADMIN', async () => {
+      const requestId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
+
+      mockFindUnique.mockResolvedValue({
+        id: requestId,
+        requesterId: 'patient-usr-1',
+        bloodGroup: 'B_POS',
+        unitsRequired: 2,
+        urgency: 'NORMAL',
+        status: 'PENDING',
+      });
+
+      mockDelete.mockResolvedValue({
+        id: requestId,
+        status: 'PENDING',
+      });
+
+      const response = await request(app)
+        .delete(`/api/requests/${requestId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toContain('deleted successfully');
+    });
+
+    it('should throw 403 ForbiddenError if non-owner user attempts to delete request', async () => {
+      const requestId = 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d';
+
+      mockFindUnique.mockResolvedValue({
+        id: requestId,
+        requesterId: 'patient-usr-1',
+        status: 'PENDING',
+      });
+
+      const response = await request(app)
+        .delete(`/api/requests/${requestId}`)
+        .set('Authorization', `Bearer ${anotherUserToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toContain('do not have permission');
+    });
+
+    it('should return 400 for invalid UUID parameter', async () => {
+      const response = await request(app)
+        .delete('/api/requests/invalid-uuid-format')
+        .set('Authorization', `Bearer ${patientToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
     });
   });
 

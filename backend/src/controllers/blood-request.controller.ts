@@ -198,6 +198,32 @@ export class BloodRequestController {
   }
 
   /**
+   * Deletes a blood request raised by a hospital or user (Requester or Admin).
+   */
+  async delete(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      if (!id || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+        throw new BadRequestError('Invalid blood request ID parameter.');
+      }
+
+      const deleted = await bloodRequestService.deleteRequest(
+        id,
+        req.user?.userId as string,
+        req.user?.role as string
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Blood request deleted successfully.',
+        data: { request: deleted },
+      });
+    } catch (error: any) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
    * Searches and filters blood requests.
    */
   async search(req: Request, res: Response) {

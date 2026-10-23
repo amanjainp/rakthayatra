@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useBloodRequests } from '../hooks/useBloodRequests';
 import { useAuth } from '../hooks/useAuth';
-import { Activity, Plus, Check, X, Award } from 'lucide-react';
+import { Activity, Plus, Check, X, Award, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Table, TableHead, TableRow, TableCell, TableBody } from '../components/ui/Table';
@@ -25,7 +25,7 @@ export const BloodRequests: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const { data: requests = [], createRequest, approveRequest, rejectRequest, fulfillRequest, cancelRequest, isCreatingRequest } = useBloodRequests({
+  const { data: requests = [], createRequest, approveRequest, rejectRequest, fulfillRequest, cancelRequest, deleteRequest, isCreatingRequest } = useBloodRequests({
     status: statusFilter || undefined,
   });
 
@@ -151,6 +151,11 @@ export const BloodRequests: React.FC = () => {
                   {user?.id === req.requesterId && (req.status === 'PENDING' || req.status === 'APPROVED') && (
                     <Button variant="outline" size="sm" onClick={() => cancelRequest(req.id)}>
                       Cancel
+                    </Button>
+                  )}
+                  {(user?.id === req.requesterId || isAdmin) && (
+                    <Button variant="outline" size="sm" onClick={() => deleteRequest(req.id)} className="text-rose-500 hover:text-rose-400">
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
                     </Button>
                   )}
                 </TableCell>

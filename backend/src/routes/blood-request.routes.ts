@@ -27,6 +27,9 @@ router.post('/:id/fulfill', authenticate, requireRoles(['HOSPITAL', 'BLOOD_BANK'
 // 5. Cancel request (Authenticated users - ownership checked in controller)
 router.post('/:id/cancel', authenticate, (req, res) => bloodRequestController.cancel(req, res));
 
+// 6. Delete request (Authenticated users - ownership checked in controller)
+router.delete('/:id', authenticate, (req, res) => bloodRequestController.delete(req as any, res));
+
 // Get intelligent matches (Hospitals, Patients, Admins)
 router.get('/:id/matches', authenticate, requireRoles(['HOSPITAL', 'PATIENT', 'ADMIN']), (req, res) =>
   bloodRequestController.getMatches(req, res)

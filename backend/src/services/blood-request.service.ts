@@ -3,7 +3,7 @@ import { BloodRequestRepository } from '../repositories/blood-request.repository
 import { UserRepository } from '../repositories/user.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { InventoryRepository } from '../repositories/inventory.repository';
-import { BadRequestError, NotFoundError } from '../errors/app-error';
+import { BadRequestError, NotFoundError, ForbiddenError } from '../errors/app-error';
 import { BLOOD_COMPATIBILITY } from '../constants/app.constants';
 import { mapsService } from './maps.service';
 import { firebaseService } from './firebase.service';
@@ -957,6 +957,46 @@ export class BloodRequestService {
     }
 
     return results;
+  }
+
+  /**
+   * Permanently deletes a blood request raised by a requester or hospital.
+   * Only the requester or an ADMIN can delete it.
+   */
+  async deleteRequest(requestId: string, userId: string, userRole: string): Promise<BloodRequest> {
+    return prisma.$transaction(async (tx) => {
+      const requestRecord = await tx.bloodRequest.findUnique({
+        where: { id: requestId },
+      });
+      if (!requestRecord) {
+        throw new NotFoundError('Blood request record not found.');
+      }
+
+      if (userRole !== 'ADMIN' && requestRecord.requesterId !== userId) {
+        throw new ForbiddenError('You do not have permission to delete this blood request.');
+      }
+
+      const deleted = await tx.bloodRequest.delete({
+        where: { id: requestId },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId || null,
+          action: 'DELETE_BLOOD_REQUEST',
+          details: {
+            requestId,
+            bloodGroup: requestRecord.bloodGroup,
+            unitsRequired: requestRecord.unitsRequired,
+            urgency: requestRecord.urgency,
+            status: requestRecord.status,
+          },
+        },
+      });
+
+      logger.info(`[BloodRequest] Request #${requestId} deleted by user ${userId} (${userRole})`);
+      return deleted;
+    });
   }
 }
 

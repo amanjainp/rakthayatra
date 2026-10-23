@@ -241,6 +241,24 @@ export const useEmergencyBroadcast = () => {
   });
 };
 
+export const useDeleteHospitalRequisition = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await apiClient.delete(`/requests/${requestId}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['bloodRequests'] });
+      toast.success('Requisition deleted successfully.');
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err, 'Failed to delete blood requisition'));
+    },
+  });
+};
+
 // ---------------------------------------------------------------------------
 // 3. Blood Bank Incoming Requisitions Hooks
 // ---------------------------------------------------------------------------

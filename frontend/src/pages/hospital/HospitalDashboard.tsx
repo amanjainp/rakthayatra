@@ -12,15 +12,18 @@ import {
   CheckCircle2,
   Phone,
   Send,
+  Trash2,
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import {
   useHospitalRequisitions,
   useCreateHospitalRequisition,
+  useDeleteHospitalRequisition,
   useEmergencyBroadcast,
   useRegisteredFacilities,
   useActiveDonorsForFacility,
+  HospitalRequisition,
 } from '../../hooks/useRealtimeLogistics';
 
 export const HospitalDashboard: React.FC = () => {
@@ -29,11 +32,13 @@ export const HospitalDashboard: React.FC = () => {
   const { data: requisitions = [], isLoading: isReqLoading } = useHospitalRequisitions();
   const { data: bloodBanks = [] } = useRegisteredFacilities('BLOOD_BANK');
   const createRequisition = useCreateHospitalRequisition();
+  const deleteRequisition = useDeleteHospitalRequisition();
   const emergencyBroadcast = useEmergencyBroadcast();
 
   // Modals state
   const [isRequisitionOpen, setIsRequisitionOpen] = useState(false);
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<HospitalRequisition | null>(null);
 
   // Requisition Form state
   const [targetBankId, setTargetBankId] = useState('');
@@ -227,6 +232,7 @@ export const HospitalDashboard: React.FC = () => {
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Blood Bank Response</th>
                   <th className="py-3 px-4">Date Raised</th>
+                  <th className="py-3 px-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -287,6 +293,18 @@ export const HospitalDashboard: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-slate-500">
                       {new Date(req.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(req)}
+                        disabled={deleteRequisition.isPending}
+                        title="Delete Requisition"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors inline-flex items-center gap-1.5 text-xs border border-transparent hover:border-rose-500/20"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span className="text-[11px] font-semibold text-rose-400">Delete</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -599,6 +617,57 @@ export const HospitalDashboard: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+      {/* 7. Modal: Delete Requisition Confirmation */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Blood Requisition"
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          <p className="text-sm">
+            Are you sure you want to delete requisition{' '}
+            <span className="font-mono font-bold text-rose-400">
+              #{deleteTarget?.id.slice(0, 8)}
+            </span>{' '}
+            for{' '}
+            <span className="font-bold text-white">
+              {deleteTarget?.unitsRequired} Units of {deleteTarget?.bloodGroup.replace('_', '+')}
+            </span>
+            ?
+          </p>
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300">
+            ⚠️ This will permanently remove the requisition from the ledger and participating blood banks. This action cannot be undone.
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleteRequisition.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              type="button"
+              disabled={deleteRequisition.isPending}
+              onClick={async () => {
+                if (!deleteTarget) return;
+                try {
+                  await deleteRequisition.mutateAsync(deleteTarget.id);
+                  setDeleteTarget(null);
+                } catch {
+                  // Handled by onError toast
+                }
+              }}
+              className="bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleteRequisition.isPending ? 'Deleting...' : 'Delete Requisition'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
