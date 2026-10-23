@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useMapsLocations, MapMarker } from '../hooks/useMapsLocations';
 import { Navigation, Compass, ShieldAlert, Database, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -12,11 +12,17 @@ export const EmergencyMap: React.FC = () => {
   const [showBanks, setShowBanks] = useState(true);
   const [showRequests, setShowRequests] = useState(true);
   const [activeMarker, setActiveMarker] = useState<MapMarker | null>(null);
-  const [address, setAddress] = useState('Noida / Delhi Grid active');
+  const [address, setAddress] = useState('Default Location (Fallback): Noida / Delhi Grid');
+  const [isLocating, setIsLocating] = useState(false);
+  const [hasUserLocation, setHasUserLocation] = useState(false);
+  const isLocatingRef = useRef(false);
+  const hasUserLocationRef = useRef(false);
+  const activeRequestIdRef = useRef(0);
 
   const { data: markers = [], isLoading } = useMapsLocations(center, radius);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchAddress = async () => {
       try {
         const res = await apiClient.get('/requests/reverse-geocode', {
@@ -25,42 +31,90 @@ export const EmergencyMap: React.FC = () => {
             longitude: center.longitude,
           },
         });
-        if (res.data?.data?.address) {
-          setAddress(res.data.data.address);
+        if (isMounted && res.data?.data?.address) {
+          const rawAddress = res.data.data.address;
+          setAddress(hasUserLocation ? rawAddress : `Default Location (Fallback): ${rawAddress}`);
         }
       } catch (err) {
         console.error(err);
       }
     };
     fetchAddress();
-  }, [center]);
+    return () => {
+      isMounted = false;
+    };
+  }, [center, hasUserLocation]);
 
-  // Attempt live location grab
-  const handleLocateMe = () => {
-    if (navigator.geolocation) {
-      toast.loading('Detecting location...', { id: 'geo' });
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCenter({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-          toast.success('Location updated successfully', { id: 'geo' });
-        },
-        (err) => {
-          console.error(err);
-          toast.error(`Location access failed: ${err.message || 'Permission denied'}. Using Noida/Delhi default.`, { id: 'geo' });
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    } else {
-      toast.error('Geolocation is not supported by this browser.');
+  // Attempt live location grab with resilient fallback and race condition protection
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by this browser.', { id: 'geo' });
+      return;
     }
-  };
+
+    if (isLocatingRef.current) return;
+    isLocatingRef.current = true;
+    setIsLocating(true);
+
+    const requestId = ++activeRequestIdRef.current;
+    toast.loading('Detecting location...', { id: 'geo' });
+
+    const onPositionSuccess = (pos: GeolocationPosition) => {
+      if (activeRequestIdRef.current !== requestId) return;
+      isLocatingRef.current = false;
+      setIsLocating(false);
+      hasUserLocationRef.current = true;
+      setHasUserLocation(true);
+      setCenter({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      toast.success('Location updated successfully', { id: 'geo' });
+    };
+
+    const onPositionError = (err: GeolocationPositionError) => {
+      if (activeRequestIdRef.current !== requestId) return;
+      isLocatingRef.current = false;
+      setIsLocating(false);
+
+      let msg = 'Location access failed. Please try again.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Location access denied. Please enable location permissions in your browser settings.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'Location unavailable. Unable to determine device position.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'Location request timed out. Please click "Locate Me" to retry.';
+      }
+
+      if (!hasUserLocationRef.current) {
+        toast.error(`${msg} Using default map view.`, { id: 'geo', duration: 4000 });
+      } else {
+        toast.error(`${msg} Keeping current map location.`, { id: 'geo', duration: 4000 });
+      }
+    };
+
+    // 1. Primary high-accuracy attempt (10s timeout, 60s cache window)
+    navigator.geolocation.getCurrentPosition(
+      onPositionSuccess,
+      (err) => {
+        // If high accuracy times out, try standard accuracy fallback (network / Wi-Fi triangulation)
+        if (err.code === err.TIMEOUT) {
+          navigator.geolocation.getCurrentPosition(
+            onPositionSuccess,
+            onPositionError,
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+          );
+        } else {
+          onPositionError(err);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
 
   useEffect(() => {
     handleLocateMe();
-  }, []);
+  }, [handleLocateMe]);
 
   const filteredMarkers = markers.filter((m) => {
     if (m.type === 'DONOR' && !showDonors) return false;
@@ -83,8 +137,14 @@ export const EmergencyMap: React.FC = () => {
           </div>
         </div>
 
-        <Button variant="outline" onClick={handleLocateMe} className="flex items-center gap-2">
-          <Navigation className="w-4 h-4" /> Locate Me
+        <Button
+          variant="outline"
+          onClick={handleLocateMe}
+          disabled={isLocating}
+          className="flex items-center gap-2"
+        >
+          <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
+          {isLocating ? 'Locating...' : 'Locate Me'}
         </Button>
       </div>
 
