@@ -202,11 +202,24 @@ export class DonationCampController {
         throw new BadRequestError('Invalid donation camp ID parameter.');
       }
 
-      const parsed = registerDonorSchema.parse(req.body);
+      let donorProfileId = req.body?.donorProfileId;
+      if (!donorProfileId && req.user?.userId) {
+        const donorProfile = await prisma.donorProfile.findUnique({
+          where: { userId: req.user.userId },
+        });
+        if (donorProfile) {
+          donorProfileId = donorProfile.id;
+        }
+      }
+
+      if (!donorProfileId) {
+        const parsed = registerDonorSchema.parse(req.body);
+        donorProfileId = parsed.donorProfileId;
+      }
 
       // Security Ownership check
       const donor = await prisma.donorProfile.findUnique({
-        where: { id: parsed.donorProfileId },
+        where: { id: donorProfileId },
       });
       if (!donor) {
         throw new NotFoundError('Donor profile not found.');
@@ -216,7 +229,7 @@ export class DonationCampController {
         throw new ForbiddenError('You do not have permission to register this profile.');
       }
 
-      await donationCampService.registerDonor(id, parsed.donorProfileId, req.user?.userId);
+      await donationCampService.registerDonor(id, donorProfileId, req.user?.userId);
 
       return res.status(200).json({
         success: true,
@@ -237,11 +250,34 @@ export class DonationCampController {
         throw new BadRequestError('Invalid donation camp ID parameter.');
       }
 
-      const parsed = associateHospitalSchema.parse(req.body);
+      let hospitalProfileId = req.body?.hospitalProfileId;
+      if (!hospitalProfileId && req.user?.userId) {
+        const profile = await prisma.hospitalProfile.findUnique({
+          where: { userId: req.user.userId },
+        });
+        if (profile) {
+          hospitalProfileId = profile.id;
+        }
+      }
+      if (!hospitalProfileId && req.body?.hospitalId) {
+        const profile = await prisma.hospitalProfile.findFirst({
+          where: {
+            OR: [{ id: req.body.hospitalId }, { userId: req.body.hospitalId }],
+          },
+        });
+        if (profile) {
+          hospitalProfileId = profile.id;
+        }
+      }
+
+      if (!hospitalProfileId) {
+        const parsed = associateHospitalSchema.parse(req.body);
+        hospitalProfileId = parsed.hospitalProfileId;
+      }
 
       // Security Ownership check
       const hospital = await prisma.hospitalProfile.findUnique({
-        where: { id: parsed.hospitalProfileId },
+        where: { id: hospitalProfileId },
       });
       if (!hospital) {
         throw new NotFoundError('Hospital profile not found.');
@@ -251,7 +287,7 @@ export class DonationCampController {
         throw new ForbiddenError('You do not have permission to associate this hospital profile.');
       }
 
-      await donationCampService.associateHospital(id, parsed.hospitalProfileId, req.user?.userId);
+      await donationCampService.associateHospital(id, hospitalProfileId, req.user?.userId);
 
       return res.status(200).json({
         success: true,

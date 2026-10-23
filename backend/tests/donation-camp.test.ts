@@ -37,6 +37,8 @@ jest.mock('@prisma/client', () => {
       findMany: (...args: any) => mockFindMany(...args),
       create: (...args: any) => mockCreate(...args),
       update: (...args: any) => mockUpdate(...args),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      count: (...args: any) => mockCount(...args),
     },
     donation: {
       count: (...args: any) => mockCount(...args),
@@ -243,6 +245,46 @@ describe('Donation Camp Module API Endpoint Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.registeredDonorsCount).toBe(5);
       expect(response.body.data.totalUnitsCollected).toBe(12);
+    });
+  });
+
+  describe('GET /api/camps (List upcoming camps)', () => {
+    it('should list authentic upcoming camps and include official sync metadata', async () => {
+      mockFindMany.mockResolvedValue([
+        {
+          id: mockCampId,
+          name: 'Red Cross Voluntary Blood Donation Drive',
+          organizer: 'Indian Red Cross Society & City Central Blood Bank',
+          address: 'Town Hall Grounds, JC Road, Bengaluru',
+          city: 'Bengaluru',
+          latitude: 12.9634,
+          longitude: 77.5855,
+          startDate: new Date(Date.now() + 86400000),
+          endDate: new Date(Date.now() + 2 * 86400000),
+          status: 'UPCOMING',
+          externalRegistrationUrl: 'https://eraktkosh.mohfw.gov.in/BLDAHIMS/bloodbank/campSchedule.cnt',
+        },
+      ]);
+      mockCount.mockResolvedValue(1);
+
+      const response = await request(app).get('/api/camps');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data.items)).toBe(true);
+      expect(response.body.data.items.length).toBe(1);
+      expect(response.body.data.items[0].name).toBe('Red Cross Voluntary Blood Donation Drive');
+      expect(response.body.data.sync).toBeDefined();
+    });
+
+    it('should allow public access to camps listing without authentication header', async () => {
+      mockFindMany.mockResolvedValue([]);
+      mockCount.mockResolvedValue(0);
+
+      const response = await request(app).get('/api/camps/public');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
     });
   });
 });

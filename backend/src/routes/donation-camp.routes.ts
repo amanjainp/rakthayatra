@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { donationCampController } from '../controllers/donation-camp.controller';
-import { authenticate, requireRoles } from '../middlewares/auth.middleware';
+import { authenticate, optionalAuthenticate, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -44,8 +44,8 @@ router.get('/public', (req, res) =>
   donationCampController.list(req, res)
 );
 
-// 8. Query/search camps list (Authenticated users)
-router.get('/', authenticate, (req, res) =>
+// 8. Query/search camps list (Accessible publicly or with authentication)
+router.get('/', optionalAuthenticate, (req, res) =>
   donationCampController.list(req, res)
 );
 

@@ -13,83 +13,90 @@ export interface DonationCampItem {
   latitude: number;
   longitude: number;
   externalRegistrationUrl?: string | null;
+  status?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export const useCamps = () => {
+export interface CampSyncMetadata {
+  lastSyncAt: string;
+  status: string;
+  source: string;
+  syncedCount?: number;
+  expiredTransitionedCount?: number;
+  message?: string;
+}
+
+export const useCamps = (options?: { city?: string }) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['camps'],
+    queryKey: ['camps', options?.city],
     queryFn: async () => {
       try {
-        const res = await apiClient.get('/camps').catch(() => null);
+        const params = options?.city ? { city: options.city } : {};
+        const res = await apiClient.get('/camps', { params }).catch(() => null);
+
+        const syncMetadata: CampSyncMetadata | null = res?.data?.data?.sync || null;
+
         const rawItems = res?.data?.data?.items || res?.data?.data;
         if (rawItems && Array.isArray(rawItems)) {
-          return rawItems.map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            location: item.location || item.address || 'Unknown Address',
-            startDate: item.startDate,
-            endDate: item.endDate,
-            bloodBankId: item.bloodBankId || '',
-            bloodBankName: item.bloodBankName || item.organizer || 'Red Cross Society',
-            latitude: item.latitude,
-            longitude: item.longitude,
-            externalRegistrationUrl: item.externalRegistrationUrl || null,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
-          })) as DonationCampItem[];
+          const now = new Date();
+          const items: any = rawItems
+            .map((item: any) => ({
+              id: item.id,
+              name: item.name,
+              location: item.location || item.address || 'Verified Facility',
+              startDate: item.startDate,
+              endDate: item.endDate,
+              bloodBankId: item.bloodBankId || '',
+              bloodBankName: item.bloodBankName || item.organizer || 'Authorized Medical Center',
+              latitude: item.latitude || 0,
+              longitude: item.longitude || 0,
+              externalRegistrationUrl: item.externalRegistrationUrl || null,
+              status: item.status || 'UPCOMING',
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+            }))
+            .filter((item: DonationCampItem) => {
+              // Ensure expired camps are excluded from user-facing active list
+              const end = new Date(item.endDate);
+              return !isNaN(end.getTime()) && end >= now;
+            });
+          items.sync = syncMetadata;
+          return items as DonationCampItem[];
         }
-        return [
-          {
-            id: 'camp-1',
-            name: 'CurePlus Blood Centre Donation Camp',
-            location: 'ARC Sportzone, Hebbal Industrial Area, Mysuru',
-            startDate: new Date(Date.now() + 86400 * 1000).toISOString(),
-            endDate: new Date(Date.now() + 3 * 86400 * 1000).toISOString(),
-            bloodBankId: 'bb-1',
-            bloodBankName: 'CurePlus Blood Centre',
-            latitude: 12.3550,
-            longitude: 76.6200,
-            externalRegistrationUrl: 'https://cureplusbloodbank.com/',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: 'camp-2',
-            name: 'Juhar Parivar Independence Drive',
-            location: 'Kauvery Hospital, Electronic City, Bengaluru',
-            startDate: new Date(Date.now() + 2 * 86400 * 1000).toISOString(),
-            endDate: new Date(Date.now() + 4 * 86400 * 1000).toISOString(),
-            bloodBankId: 'bb-2',
-            bloodBankName: 'Juhar Parivar & Kauvery Hospital',
-            latitude: 12.8465,
-            longitude: 77.6625,
-            externalRegistrationUrl: 'https://www.kauveryhospital.com/',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ] as DonationCampItem[];
+        const emptyList: any = [];
+        emptyList.sync = syncMetadata;
+        return emptyList as DonationCampItem[];
       } catch {
         return [] as DonationCampItem[];
       }
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes stale time
+    refetchInterval: 15 * 60 * 1000, // Revalidate every 15 minutes
+    refetchOnWindowFocus: true,
   });
 
+  const sync = (query.data as any)?.sync || null;
+
   const createCampMutation = useMutation({
-    mutationFn: async (data: { name: string; location: string; startDate: string; endDate: string; bloodBankId: string; latitude: number; longitude: number }) => {
-      const location = data?.location || '';
+    mutationFn: async (data: any) => {
+      const location = data?.location || data?.address || '';
       const payload = {
         name: data?.name || '',
-        organizer: 'Red Cross Society & LifeLink',
+        organizer: data?.organizer || 'Red Cross Society & LifeLink',
         address: location,
-        city: location.toLowerCase().includes('bengaluru') || location.toLowerCase().includes('bangalore') ? 'Bengaluru' : 'Noida',
-        latitude: data?.latitude || 0,
-        longitude: data?.longitude || 0,
+        city:
+          data?.city ||
+          (location.toLowerCase().includes('bengaluru') || location.toLowerCase().includes('bangalore')
+            ? 'Bengaluru'
+            : 'Noida'),
+        latitude: Number(data?.latitude) || 0,
+        longitude: Number(data?.longitude) || 0,
         startDate: data?.startDate || '',
         endDate: data?.endDate || '',
+        externalRegistrationUrl: data?.externalRegistrationUrl || null,
       };
       const res = await apiClient.post('/camps', payload);
       return res.data;
@@ -98,58 +105,85 @@ export const useCamps = () => {
       queryClient.invalidateQueries({ queryKey: ['camps'] });
       toast.success('Donation camp registered successfully');
     },
-    onError: () => {
-      toast.success('Offline Mode: Camp registered successfully');
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        'Failed to register donation camp';
+      toast.error(msg);
     },
   });
 
   const registerDonorMutation = useMutation({
-    mutationFn: async (campId: string) => {
-      const res = await apiClient.post(`/camps/${campId}/register-donor`);
+    mutationFn: async (arg: string | { campId: string; donorProfileId?: string }) => {
+      const campId = typeof arg === 'string' ? arg : arg?.campId;
+      const body = typeof arg === 'object' && arg?.donorProfileId ? { donorProfileId: arg.donorProfileId } : {};
+      const res = await apiClient.post(`/camps/${campId}/register-donor`, body);
       return res.data;
     },
     onSuccess: () => {
       toast.success('Registered to attend camp successfully');
     },
-    onError: () => {
-      toast.success('Offline Mode: Successfully registered to attend camp');
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        'Failed to register for camp';
+      toast.error(msg);
     },
   });
 
   const registerVolunteerMutation = useMutation({
-    mutationFn: async (data: { campId: string; name: string; email: string; phone: string }) => {
-      const res = await apiClient.post(`/camps/${data.campId}/volunteer`, {
+    mutationFn: async (data: {
+      campId: string;
+      name?: string;
+      email?: string;
+      phone?: string;
+      volunteer?: { name: string; email: string; phone: string };
+    }) => {
+      const vol = data.volunteer || {
         name: data.name,
         email: data.email,
         phone: data.phone,
-      });
+      };
+      const res = await apiClient.post(`/camps/${data.campId}/volunteer`, vol);
       return res.data;
     },
     onSuccess: () => {
       toast.success('Registered as camp volunteer. System queue updated.');
     },
-    onError: () => {
-      toast.success('Offline Mode: Registered as volunteer successfully');
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        'Failed to register volunteer';
+      toast.error(msg);
     },
   });
 
   const associateHospitalMutation = useMutation({
-    mutationFn: async (data: { campId: string; hospitalId: string }) => {
+    mutationFn: async (data: { campId: string; hospitalId?: string; hospitalProfileId?: string }) => {
       const res = await apiClient.post(`/camps/${data.campId}/associate-hospital`, {
         hospitalId: data.hospitalId,
+        hospitalProfileId: data.hospitalProfileId,
       });
       return res.data;
     },
     onSuccess: () => {
       toast.success('Hospital associated with camp successfully');
     },
-    onError: () => {
-      toast.success('Offline Mode: Associated hospital successfully');
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        'Failed to associate facility';
+      toast.error(msg);
     },
   });
 
   return {
     ...query,
+    sync,
     createCamp: createCampMutation.mutateAsync,
     isCreatingCamp: createCampMutation.isPending,
     registerDonor: registerDonorMutation.mutateAsync,

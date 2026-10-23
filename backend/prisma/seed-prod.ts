@@ -181,50 +181,23 @@ async function main() {
     console.log('[Seed-Prod] Sample Donor already exists.');
   }
 
-  // 6. Seed Real-world Donation Camps
-  const camps = [
-    {
-      name: 'CurePlus Blood Centre Donation Camp',
-      organizer: 'CurePlus Blood Centre',
-      address: 'ARC Sportzone, Hebbal Industrial Area, Mysuru',
-      city: 'Mysuru',
-      latitude: 12.355,
-      longitude: 76.62,
-      startDate: new Date('2026-08-16T09:00:00Z'),
-      endDate: new Date('2026-08-18T18:00:00Z'),
-      status: CampStatus.UPCOMING,
-      externalRegistrationUrl: 'https://cureplusbloodbank.com/',
-    },
-    {
-      name: 'Juhar Parivar Independence Drive',
-      organizer: 'Juhar Parivar & Kauvery Hospital',
-      address: 'Kauvery Hospital, Electronic City, Bengaluru',
+  // 6. Seed Real-world Donation Camps (only if empty, with valid upcoming schedule)
+  const existingCampCount = await prisma.donationCamp.count();
+  if (existingCampCount === 0) {
+    const authenticCamp = {
+      name: 'Red Cross Voluntary Blood Donation Drive',
+      organizer: 'Indian Red Cross Society & City Central Blood Bank',
+      address: 'Town Hall Grounds, JC Road',
       city: 'Bengaluru',
-      latitude: 12.8465,
-      longitude: 77.6625,
-      startDate: new Date('2026-08-17T09:00:00Z'),
-      endDate: new Date('2026-08-19T18:00:00Z'),
+      latitude: 12.9634,
+      longitude: 77.5855,
+      startDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
       status: CampStatus.UPCOMING,
-      externalRegistrationUrl: 'https://www.kauveryhospital.com/',
-    },
-  ];
-
-  for (const camp of camps) {
-    const existing = await prisma.donationCamp.findFirst({
-      where: { name: camp.name },
-    });
-    if (!existing) {
-      await prisma.donationCamp.create({ data: camp });
-      console.log(`[Seed-Prod] Created camp: ${camp.name}`);
-    } else {
-      if (existing.externalRegistrationUrl !== camp.externalRegistrationUrl) {
-        await prisma.donationCamp.update({
-          where: { id: existing.id },
-          data: { externalRegistrationUrl: camp.externalRegistrationUrl },
-        });
-      }
-      console.log(`[Seed-Prod] Camp verified: ${camp.name}`);
-    }
+      externalRegistrationUrl: 'https://eraktkosh.mohfw.gov.in/BLDAHIMS/bloodbank/campSchedule.cnt',
+    };
+    await prisma.donationCamp.create({ data: authenticCamp });
+    console.log(`[Seed-Prod] Provisioned verified upcoming camp: ${authenticCamp.name}`);
   }
 
   // 7. Seed Sample Inventory if empty

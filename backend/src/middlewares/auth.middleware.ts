@@ -35,6 +35,19 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
   return next();
 }
 
+export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const payload = verifyAccessToken(token);
+    if (payload) {
+      req.user = payload;
+      (req.user as any).id = payload.userId;
+    }
+  }
+  return next();
+}
+
 export function requireRoles(allowedRoles: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {

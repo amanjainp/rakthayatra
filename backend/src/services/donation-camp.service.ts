@@ -6,6 +6,7 @@ import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { redisService } from './redis.service';
 import { BadRequestError, NotFoundError } from '../errors/app-error';
 import { metricsService } from './metrics.service';
+import { campSyncService, CampSyncResult } from './camp-sync.service';
 
 const prisma = new PrismaClient();
 
@@ -327,74 +328,56 @@ export class DonationCampService {
 
   /**
    * Queries list of upcoming/active camps.
+   * Excludes expired camps whose end date has passed, preserving historical records.
    */
-  async getCamps(params: { page?: number; limit?: number; city?: string }): Promise<{
+  async getCamps(params: {
+    page?: number;
+    limit?: number;
+    city?: string;
+    includePast?: boolean;
+    status?: CampStatus;
+  }): Promise<{
     items: DonationCamp[];
     total: number;
+    sync?: CampSyncResult | null;
   }> {
     const page = params.page || 1;
     const limit = params.limit || 10;
+    const now = new Date();
 
-    // Seed real-world active and upcoming blood donation camps in Mysuru and Bengaluru
-    const realCamps = [
-      {
-        name: 'CurePlus Blood Centre Donation Camp',
-        organizer: 'CurePlus Blood Centre',
-        address: 'ARC Sportzone, Hebbal Industrial Area, Mysuru',
-        city: 'Mysuru',
-        latitude: 12.3550,
-        longitude: 76.6200,
-        startDate: new Date('2026-08-16T09:00:00Z'),
-        endDate: new Date('2026-08-18T18:00:00Z'),
-        status: 'UPCOMING' as any,
-        externalRegistrationUrl: 'https://cureplusbloodbank.com/'
-      },
-      {
-        name: 'Juhar Parivar Independence Drive',
-        organizer: 'Juhar Parivar & Kauvery Hospital',
-        address: 'Kauvery Hospital, Electronic City, Bengaluru',
-        city: 'Bengaluru',
-        latitude: 12.8465,
-        longitude: 77.6625,
-        startDate: new Date('2026-08-17T09:00:00Z'),
-        endDate: new Date('2026-08-19T18:00:00Z'),
-        status: 'UPCOMING' as any,
-        externalRegistrationUrl: 'https://www.kauveryhospital.com/'
-      }
-    ];
+    // 1. Maintain statuses (mark expired as COMPLETED, active as ACTIVE) & sync official feeds
+    const syncResult = await campSyncService.syncOfficialCamps().catch(() => null);
 
-    for (const camp of realCamps) {
-      if (prisma.donationCamp && typeof prisma.donationCamp.findFirst === 'function') {
-        const existing = await prisma.donationCamp.findFirst({
-          where: { name: camp.name }
-        });
-        if (!existing) {
-          if (typeof prisma.donationCamp.create === 'function') {
-            await prisma.donationCamp.create({ data: camp }).catch(() => null);
-          }
-        } else if (existing.externalRegistrationUrl !== camp.externalRegistrationUrl) {
-          if (typeof prisma.donationCamp.update === 'function') {
-            await prisma.donationCamp.update({
-              where: { id: existing.id },
-              data: { externalRegistrationUrl: camp.externalRegistrationUrl }
-            }).catch(() => null);
-          }
-        }
-      }
+    // 2. Query valid active/upcoming camps
+    const campRepo = new DonationCampRepository(prisma);
+    const whereClause: any = {
+      deletedAt: null,
+    };
+
+    if (!params.includePast) {
+      // Exclude camps that have definitively ended
+      whereClause.endDate = { gte: now };
+      whereClause.status = { in: ['UPCOMING', 'ACTIVE'] };
+    } else if (params.status) {
+      whereClause.status = params.status;
     }
 
-    const campRepo = new DonationCampRepository(prisma);
-    const whereClause: any = {};
     if (params.city) {
       whereClause.city = { contains: params.city, mode: 'insensitive' };
     }
 
-    return campRepo.findPaginated({
+    const result = await campRepo.findPaginated({
       page,
       limit,
       where: whereClause,
       orderBy: { startDate: 'asc' },
     });
+
+    return {
+      items: result.items,
+      total: result.total,
+      sync: syncResult,
+    };
   }
 }
 
