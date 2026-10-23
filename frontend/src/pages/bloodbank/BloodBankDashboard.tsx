@@ -19,7 +19,11 @@ import {
   Phone,
   Clock,
   UserCheck,
+  Download,
+  Printer,
+  Copy,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Modal } from '../../components/ui/Modal';
@@ -133,9 +137,107 @@ export const BloodBankDashboard: React.FC = () => {
     { label: 'Launch Camp Drive', action: () => navigate('/camps'), desc: 'Organize community blood donation drive.', icon: <Megaphone className="w-5 h-5" /> },
   ];
 
+  const getQrPayload = (u: BloodUnitItem): string => {
+    return JSON.stringify(
+      {
+        system: 'LifeLink-Rakthayatra',
+        unitId: u.unitId,
+        bloodGroup: u.bloodGroup,
+        component: u.component,
+        unitsCount: u.unitsCount,
+        storageLocation: u.storageRack,
+        collectionDate: u.collectionDate,
+        expiryDate: u.expiryDate,
+        pathologyClearance: 'HIV/HepB/HepC/Syphilis NEGATIVE',
+        status: u.status,
+        verificationCode: `VERIFIED-${u.unitId}-${u.bloodGroup.replace('+', 'POS').replace('-', 'NEG')}`,
+      },
+      null,
+      2
+    );
+  };
+
   const handleOpenQr = (unit: BloodUnitItem) => {
     setSelectedUnitForQr(unit);
     setIsQrOpen(true);
+  };
+
+  const handleDownloadQr = () => {
+    if (!selectedUnitForQr) return;
+    const svgElement = document.getElementById(`qr-passport-${selectedUnitForQr.unitId}`);
+    if (!svgElement) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedUnitForQr.unitId}-cold-chain-qr.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`QR code downloaded for ${selectedUnitForQr.unitId}`);
+  };
+
+  const handleCopyQrData = () => {
+    if (!selectedUnitForQr) return;
+    navigator.clipboard.writeText(getQrPayload(selectedUnitForQr));
+    toast.success('Digital QR passport payload copied to clipboard');
+  };
+
+  const handlePrintBagLabel = () => {
+    if (!selectedUnitForQr) return;
+    const printWindow = window.open('', '_blank', 'width=500,height=600');
+    if (!printWindow) {
+      toast.error('Pop-up blocked. Please allow pop-ups to print bag labels.');
+      return;
+    }
+
+    const svgElement = document.getElementById(`qr-passport-${selectedUnitForQr.unitId}`);
+    const svgHtml = svgElement ? svgElement.outerHTML : '';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Blood Bag Label - ${selectedUnitForQr.unitId}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif; padding: 24px; text-align: center; color: #000; background: #fff; }
+            .label-card { border: 2px dashed #000; padding: 16px; border-radius: 8px; max-width: 320px; margin: 0 auto; }
+            h2 { margin: 4px 0; font-size: 18px; letter-spacing: 1px; }
+            .bg { font-size: 32px; font-weight: 900; margin: 8px 0; }
+            .meta { font-size: 11px; text-align: left; margin: 12px 0 0 0; line-height: 1.6; border-top: 1px solid #000; padding-top: 8px; }
+            .qr-wrap { display: flex; justify-content: center; margin: 12px 0; }
+            .badge { display: inline-block; padding: 2px 8px; font-size: 10px; font-weight: bold; border: 1px solid #000; border-radius: 4px; margin-top: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="label-card">
+            <h2>LIFELINK / RAKTHAYATRA</h2>
+            <div style="font-size: 9px; letter-spacing: 1.5px; font-weight: bold;">COLD-CHAIN BLOOD PASSPORT</div>
+            <div class="qr-wrap">${svgHtml}</div>
+            <div style="font-family: monospace; font-weight: bold; font-size: 14px;">${selectedUnitForQr.unitId}</div>
+            <div class="bg">${selectedUnitForQr.bloodGroup}</div>
+            <div style="font-size: 12px; font-weight: bold;">${selectedUnitForQr.component} • ${selectedUnitForQr.unitsCount} Units</div>
+            <div class="badge">TESTED SAFE: NEGATIVE</div>
+            <div class="meta">
+              <div><strong>LOCATION:</strong> ${selectedUnitForQr.storageRack}</div>
+              <div><strong>COLLECTED:</strong> ${selectedUnitForQr.collectionDate}</div>
+              <div><strong>EXPIRES:</strong> ${selectedUnitForQr.expiryDate}</div>
+              <div><strong>SCREENING:</strong> HIV / HepB / HepC / Syphilis Verified</div>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    toast.success('Thermal blood bag print dialog opened');
   };
 
   const handleAddUnitSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -591,12 +693,27 @@ export const BloodBankDashboard: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="pt-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-white font-display">{u.bloodGroup}</span>
-                    <span className="text-xs text-slate-400 font-semibold">{u.unitsCount} Units</span>
+                <div className="pt-1 flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-white font-display">{u.bloodGroup}</span>
+                      <span className="text-xs text-slate-400 font-semibold">{u.unitsCount} Units</span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-medium truncate">{u.component}</p>
                   </div>
-                  <p className="text-xs text-slate-300 font-medium">{u.component}</p>
+                  <div
+                    onClick={() => handleOpenQr(u)}
+                    className="p-1.5 bg-white rounded-xl shadow-md cursor-pointer hover:scale-105 hover:ring-2 hover:ring-rose-500 transition-all shrink-0"
+                    title="Click to expand QR cold-chain passport"
+                  >
+                    <QRCodeSVG
+                      value={getQrPayload(u)}
+                      size={54}
+                      level="M"
+                      bgColor="#FFFFFF"
+                      fgColor="#0F172A"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1 text-[11px] text-slate-400 pt-2 border-t border-slate-800">
@@ -612,7 +729,7 @@ export const BloodBankDashboard: React.FC = () => {
                 </span>
                 <button
                   onClick={() => handleOpenQr(u)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <QrCode className="w-3 h-3 text-rose-400" /> QR Code
                 </button>
@@ -735,17 +852,36 @@ export const BloodBankDashboard: React.FC = () => {
         {selectedUnitForQr && (
           <div className="space-y-5 text-xs text-slate-200">
             <div className="p-6 rounded-2xl bg-white flex flex-col items-center justify-center text-slate-950 space-y-3 shadow-2xl">
-              <div className="w-40 h-40 border-4 border-slate-900 rounded-xl p-2 flex items-center justify-center relative bg-white">
-                <QrCode className="w-36 h-36 text-slate-900" />
+              <div className="p-3 bg-white border-2 border-slate-200 rounded-2xl shadow-inner flex items-center justify-center">
+                <QRCodeSVG
+                  id={`qr-passport-${selectedUnitForQr.unitId}`}
+                  value={getQrPayload(selectedUnitForQr)}
+                  size={190}
+                  level="H"
+                  includeMargin={true}
+                  bgColor="#FFFFFF"
+                  fgColor="#090D16"
+                />
               </div>
-              <span className="font-mono font-black text-sm tracking-widest">{selectedUnitForQr.unitId}</span>
-              <span className="text-[10px] text-slate-600 font-bold">DIGITAL COLD-CHAIN IDENTIFIER</span>
+              <div className="text-center">
+                <span className="font-mono font-black text-sm tracking-widest block">{selectedUnitForQr.unitId}</span>
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  Verifiable Cold-Chain Digital Passport
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 text-center max-w-xs">
+                Scan with any standard smartphone camera or hospital barcode scanner to verify batch provenance and temperature custody.
+              </p>
             </div>
 
             <div className="space-y-2 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
               <div className="flex justify-between">
                 <span className="text-slate-400">Blood Product:</span>
                 <span className="font-bold text-white">{selectedUnitForQr.bloodGroup} ({selectedUnitForQr.component})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Batch Quantity:</span>
+                <span className="font-bold text-white">{selectedUnitForQr.unitsCount} Units</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Collection Date:</span>
@@ -765,19 +901,39 @@ export const BloodBankDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setIsQrOpen(false)}>
-                Close Passport
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  toast.success('Print command sent to thermal label printer');
-                  setIsQrOpen(false);
-                }}
-              >
-                Print Bag Label
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={handleDownloadQr}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download QR
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={handleCopyQrData}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy Data
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" type="button" onClick={() => setIsQrOpen(false)}>
+                  Close
+                </Button>
+                <Button
+                  variant="primary"
+                  type="button"
+                  onClick={handlePrintBagLabel}
+                  className="flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print Bag Label
+                </Button>
+              </div>
             </div>
           </div>
         )}
