@@ -915,7 +915,8 @@ export class BloodRequestService {
     const donor = await prisma.donorProfile.findUnique({
       where: { userId: donorUserId },
     });
-    if (!donor) return [];
+    // Inactive or paused donors do not receive emergency broadcast requests
+    if (!donor || !donor.isAvailable) return [];
 
     const compatibleGroups = BLOOD_COMPATIBILITY[donor.bloodGroup];
 

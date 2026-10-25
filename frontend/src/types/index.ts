@@ -6,6 +6,9 @@ export interface User {
   fullName: string;
   phoneNumber?: string;
   role: Role;
+  donorProfile?: DonorProfile;
+  hospitalProfile?: any;
+  bloodBankProfile?: any;
   createdAt: string;
   updatedAt: string;
 }

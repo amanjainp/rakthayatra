@@ -33,17 +33,31 @@ import {
   useDonorEmergencyAlerts,
   useRespondEmergencyAlert,
   useRegisteredFacilities,
+  useUpdateDonorAvailability,
 } from '../../hooks/useRealtimeLogistics';
 
 export const DonorDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [lang, setLang] = useState<'en' | 'kn'>('en');
 
-  // Donor settings & preferences
-  const [availability, setAvailability] = useState<'AVAILABLE' | 'TEMPORARY_PAUSE' | 'INACTIVE'>('AVAILABLE');
+  // Donor settings & preferences - synced with real database state
+  const [availability, setAvailability] = useState<'AVAILABLE' | 'TEMPORARY_PAUSE' | 'INACTIVE'>(() => {
+    if (user?.donorProfile?.isAvailable === false) {
+      return 'INACTIVE';
+    }
+    return 'AVAILABLE';
+  });
+
+  React.useEffect(() => {
+    if (user?.donorProfile?.isAvailable === false) {
+      setAvailability('INACTIVE');
+    } else if (user?.donorProfile?.isAvailable === true) {
+      setAvailability('AVAILABLE');
+    }
+  }, [user?.donorProfile?.isAvailable]);
   const [searchRadius, setSearchRadius] = useState<number>(25);
 
   // Appointment booking form state
@@ -61,6 +75,7 @@ export const DonorDashboard: React.FC = () => {
   const { data: emergencyAlerts = [], isLoading: isLoadingAlerts } = useDonorEmergencyAlerts();
   const respondEmergencyMutation = useRespondEmergencyAlert();
   const { data: facilities = [], isLoading: isLoadingFacilities } = useRegisteredFacilities();
+  const updateAvailabilityMutation = useUpdateDonorAvailability();
 
   const { data, isLoading } = useDonorDashboardData(user?.id);
 
@@ -100,14 +115,18 @@ export const DonorDashboard: React.FC = () => {
     { name: 'Platinum Life Guardian', req: 10, desc: 'Hero of the community with 10+ completed voluntary donations.', achieved: totalDonations >= 10 },
   ];
 
-  const handleAvailabilityChange = (status: 'AVAILABLE' | 'TEMPORARY_PAUSE' | 'INACTIVE') => {
+  const handleAvailabilityChange = async (status: 'AVAILABLE' | 'TEMPORARY_PAUSE' | 'INACTIVE') => {
+    const prevStatus = availability;
     setAvailability(status);
-    if (status === 'AVAILABLE') {
-      toast.success('Your status is now ACTIVE. You are visible for emergency alerts in your radius.');
-    } else if (status === 'TEMPORARY_PAUSE') {
-      toast('Invitations paused temporarily.', { icon: '⏸️' });
-    } else {
-      toast('Your availability is set to Inactive.', { icon: '📴' });
+    const isAvailable = status === 'AVAILABLE';
+    try {
+      await updateAvailabilityMutation.mutateAsync({
+        isAvailable,
+        status,
+      });
+      await refreshUser();
+    } catch {
+      setAvailability(prevStatus);
     }
   };
 
@@ -354,14 +373,31 @@ Generated on: ${new Date().toLocaleDateString()}
               <AlertCircle className="w-5 h-5 text-rose-500 animate-pulse" />
               {lang === 'kn' ? 'ತುರ್ತು ಹೊಂದಾಣಿಕೆಯ ಎಚ್ಚರಿಕೆಗಳು' : 'Live Emergency Blood SOS Alerts'}
             </h3>
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            {availability === 'AVAILABLE' && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
           </div>
           <span className="text-xs text-slate-400">
-            {emergencyAlerts.length} matching requests in your area
+            {availability === 'AVAILABLE'
+              ? `${emergencyAlerts.length} matching requests in your area`
+              : 'Alerts Paused (Status: Inactive)'}
           </span>
         </div>
 
-        {isLoadingAlerts ? (
+        {availability !== 'AVAILABLE' ? (
+          <div className="p-8 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-center space-y-2">
+            <Clock className="w-8 h-8 text-amber-500 mx-auto" />
+            <p className="text-sm font-semibold text-slate-200">
+              Live SOS Alerts Are Currently Paused
+            </p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              You marked your availability as{' '}
+              <strong className="text-amber-300 font-bold">
+                {availability === 'INACTIVE' ? 'Inactive' : 'Temporary Pause'}
+              </strong>
+              . You are hidden from hospital emergency radars and will not receive SOS notifications.
+              Toggle your availability above to "Available to Donate" when ready to receive alerts again.
+            </p>
+          </div>
+        ) : isLoadingAlerts ? (
           <div className="p-8 text-center text-xs text-slate-500">Checking for live emergency alerts...</div>
         ) : emergencyAlerts.length === 0 ? (
           <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">

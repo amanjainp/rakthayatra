@@ -422,3 +422,30 @@ export const useRespondEmergencyAlert = () => {
     },
   });
 };
+
+export const useUpdateDonorAvailability = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { isAvailable: boolean; status?: 'AVAILABLE' | 'TEMPORARY_PAUSE' | 'INACTIVE' }) => {
+      const res = await apiClient.patch('/auth/me/availability', payload);
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['donorDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['donor-emergency-alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['facility-active-donors'] });
+      queryClient.invalidateQueries({ queryKey: ['matching-requests'] });
+      if (variables.isAvailable) {
+        toast.success('Your status is now ACTIVE. You are visible for emergency alerts in your radius.');
+      } else if (variables.status === 'TEMPORARY_PAUSE') {
+        toast('Invitations paused temporarily.', { icon: '⏸️' });
+      } else {
+        toast('Your availability is set to Inactive. You will not receive emergency alerts.', { icon: '📴' });
+      }
+    },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err, 'Failed to update donor availability'));
+    },
+  });
+};
+

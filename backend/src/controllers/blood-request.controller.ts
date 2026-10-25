@@ -292,15 +292,14 @@ export class BloodRequestController {
       const lng = parseFloat(req.query.longitude as string) || 77.209;
       const radiusKm = parseFloat(req.query.radius as string) || 25.0;
 
-      // 1. Fetch Active Donors (excluding current test user profile and test profile 'Aman Jain P')
+      // 1. Fetch Active Donors (strictly available, active account, excluding the caller)
       const donors = await prisma.donorProfile.findMany({
         where: {
           isAvailable: true,
           deletedAt: null,
-          fullName: { notIn: ['Aman Jain P', 'Aman Jain', 'Aman'] },
           user: {
             status: 'ACTIVE',
-            NOT: (req as any).user?.userId ? { id: (req as any).user.userId } : {}
+            NOT: (req as any).user?.userId ? { id: (req as any).user.userId } : {},
           },
         },
       });

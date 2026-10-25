@@ -79,10 +79,13 @@ export const useDonorDashboardData = (userId?: string) => {
 
         // 1. Fetch matching emergency requests within 50km of the donor's coordinates
         let matchingRequestsCount = 0;
+        let isAvailable = true;
         try {
           const userRes = await apiClient.get('/auth/me').catch(() => null);
           const donorProfile = userRes?.data?.data?.user?.donorProfile;
-          if (donorProfile?.latitude && donorProfile?.longitude) {
+          isAvailable = donorProfile ? donorProfile.isAvailable !== false : true;
+
+          if (isAvailable && donorProfile?.latitude && donorProfile?.longitude) {
             const mapRes = await apiClient.get('/requests/map', {
               params: {
                 latitude: donorProfile.latitude,
@@ -128,9 +131,19 @@ export const useDonorDashboardData = (userId?: string) => {
         return {
           metrics: [
             { label: 'My Total Donations', value: stats.totalDonations || 0, change: 'Lifetime units', changeType: 'increase' },
-            { label: 'Donor Status', value: isEligible ? 'Eligible' : 'Deferred', change: isEligible ? 'Active' : 'Resting', changeType: isEligible ? 'success' : 'warning' },
+            {
+              label: 'Donor Status',
+              value: !isAvailable ? 'Inactive' : (isEligible ? 'Eligible' : 'Deferred'),
+              change: !isAvailable ? 'Off Duty' : (isEligible ? 'Active' : 'Resting'),
+              changeType: !isAvailable ? 'neutral' : (isEligible ? 'success' : 'warning'),
+            },
             { label: 'Next Eligible Date', value: stats.nextEligibleDate ? new Date(stats.nextEligibleDate).toLocaleDateString() : 'Immediate', change: '90-day interval rule', changeType: 'neutral' },
-            { label: 'Matching Requests Nearby', value: matchingRequestsCount, change: 'Within 50km radius', changeType: 'danger' },
+            {
+              label: 'Matching Requests Nearby',
+              value: isAvailable ? matchingRequestsCount : 0,
+              change: isAvailable ? 'Within 50km radius' : 'Paused while inactive',
+              changeType: isAvailable && matchingRequestsCount > 0 ? 'danger' : 'neutral',
+            },
           ] as MetricCard[],
           activities,
         };

@@ -18,6 +18,8 @@ jest.mock('@prisma/client', () => {
     },
     donorProfile: {
       create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     medicalEligibility: {
       create: jest.fn(),
@@ -186,6 +188,82 @@ describe('Authentication Module API Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.user.userId).toBe('user-1');
+    });
+  });
+
+  describe('PATCH /api/auth/me/availability', () => {
+    it('should reject unauthenticated requests', async () => {
+      const response = await request(app)
+        .patch('/api/auth/me/availability')
+        .send({ isAvailable: false });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 400 when neither isAvailable nor status is supplied', async () => {
+      const token = generateAccessToken({ userId: 'user-1', role: 'DONOR' });
+
+      const response = await request(app)
+        .patch('/api/auth/me/availability')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should successfully update donor availability to false (INACTIVE)', async () => {
+      const token = generateAccessToken({ userId: 'user-1', role: 'DONOR' });
+
+      prisma.donorProfile.findUnique.mockResolvedValue({
+        id: 'donor-profile-1',
+        userId: 'user-1',
+        fullName: 'Aman Jain P',
+        isAvailable: true,
+      });
+
+      prisma.donorProfile.update.mockResolvedValue({
+        id: 'donor-profile-1',
+        userId: 'user-1',
+        fullName: 'Aman Jain P',
+        isAvailable: false,
+      });
+
+      const response = await request(app)
+        .patch('/api/auth/me/availability')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ isAvailable: false });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.isAvailable).toBe(false);
+    });
+
+    it('should successfully update donor availability via status string', async () => {
+      const token = generateAccessToken({ userId: 'user-1', role: 'DONOR' });
+
+      prisma.donorProfile.findUnique.mockResolvedValue({
+        id: 'donor-profile-1',
+        userId: 'user-1',
+        fullName: 'Aman Jain P',
+        isAvailable: false,
+      });
+
+      prisma.donorProfile.update.mockResolvedValue({
+        id: 'donor-profile-1',
+        userId: 'user-1',
+        fullName: 'Aman Jain P',
+        isAvailable: true,
+      });
+
+      const response = await request(app)
+        .patch('/api/auth/me/availability')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'AVAILABLE' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.isAvailable).toBe(true);
     });
   });
 });
