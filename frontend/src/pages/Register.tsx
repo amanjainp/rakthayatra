@@ -8,7 +8,6 @@ import { registerSchema } from '../utils/validation';
 import { z } from 'zod';
 import AuthLayout from '../layouts/AuthLayout';
 import { Loader } from '../components/Loader';
-import { Role } from '../types';
 
 type RegisterFormInputs = z.infer<typeof registerSchema>;
 
@@ -17,7 +16,7 @@ export const Register: React.FC = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
-  const [selectedRole, setSelectedRole] = useState<Role>('DONOR');
+  const [selectedRole, setSelectedRole] = useState<RegisterFormInputs['role']>('DONOR');
 
   const {
     register: formRegister,
@@ -87,7 +86,7 @@ export const Register: React.FC = () => {
     }
   };
 
-  const handleRoleSelect = (role: Role) => {
+  const handleRoleSelect = (role: RegisterFormInputs['role']) => {
     setSelectedRole(role);
     setValue('role', role);
     setStep(2);
@@ -102,14 +101,14 @@ export const Register: React.FC = () => {
           </p>
           <div className="grid grid-cols-1 gap-3">
             {[
-              { id: 'DONOR', label: 'Blood Donor', desc: 'Donate blood to save lives' },
-              { id: 'HOSPITAL', label: 'Hospital Facility', desc: 'Coordinate clinical supply' },
-              { id: 'BLOOD_BANK', label: 'Blood Bank', desc: 'Manage stock inventories' },
+              { id: 'DONOR' as const, label: 'Blood Donor', desc: 'Donate blood to save lives' },
+              { id: 'HOSPITAL' as const, label: 'Hospital Facility', desc: 'Coordinate clinical supply' },
+              { id: 'BLOOD_BANK' as const, label: 'Blood Bank', desc: 'Manage stock inventories' },
             ].map((r) => (
               <button
                 key={r.id}
                 type="button"
-                onClick={() => handleRoleSelect(r.id as Role)}
+                onClick={() => handleRoleSelect(r.id)}
                 className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 p-4 rounded-2xl text-left transition-all duration-200 group"
               >
                 <span className="block text-sm font-bold text-white group-hover:text-rose-500 transition-colors">
