@@ -36,7 +36,7 @@ export const registerSchema = z
   .object({
     email: z.string().email('Invalid email address format.'),
     password: passwordSchema,
-    role: z.enum(['ADMIN', 'DONOR', 'PATIENT', 'HOSPITAL', 'BLOOD_BANK']),
+    role: z.enum(['ADMIN', 'DONOR', 'HOSPITAL', 'BLOOD_BANK']),
     fullName: z.string().min(2, 'Full Name must be at least 2 characters long.'),
     phone: z.string().min(10, 'Phone number must be at least 10 digits long.'),
     

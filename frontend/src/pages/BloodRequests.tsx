@@ -57,7 +57,7 @@ export const BloodRequests: React.FC = () => {
     }
   };
 
-  const isPatientOrHospital = user?.role === 'PATIENT' || user?.role === 'HOSPITAL';
+  const isHospital = user?.role === 'HOSPITAL' || user?.role === 'ADMIN';
   const isAdmin = user?.role === 'ADMIN';
   const isStorageManager = user?.role === 'BLOOD_BANK' || user?.role === 'ADMIN';
 
@@ -75,7 +75,7 @@ export const BloodRequests: React.FC = () => {
           </div>
         </div>
 
-        {isPatientOrHospital && (
+        {isHospital && (
           <Button variant="primary" onClick={() => setIsCreateOpen(true)} className="flex items-center gap-2">
             <Plus className="w-4 h-4" /> Request Blood
           </Button>

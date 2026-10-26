@@ -16,7 +16,6 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const DonorDashboard = lazy(() => import('./pages/donor/DonorDashboard'));
-const PatientDashboard = lazy(() => import('./pages/patient/PatientDashboard'));
 const HospitalDashboard = lazy(() => import('./pages/hospital/HospitalDashboard'));
 const BloodBankDashboard = lazy(() => import('./pages/bloodbank/BloodBankDashboard'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -70,14 +69,7 @@ function App() {
                     </RoleProtectedRoute>
                   }
                 />
-                <Route
-                  path="/patient/dashboard"
-                  element={
-                    <RoleProtectedRoute allowedRoles={['PATIENT']}>
-                      <PatientDashboard />
-                    </RoleProtectedRoute>
-                  }
-                />
+                <Route path="/patient/*" element={<Navigate to="/access-denied" replace />} />
                 <Route
                   path="/hospital/dashboard"
                   element={
@@ -107,7 +99,7 @@ function App() {
                 <Route
                   path="/requests"
                   element={
-                    <RoleProtectedRoute allowedRoles={['PATIENT', 'HOSPITAL', 'ADMIN', 'BLOOD_BANK']}>
+                    <RoleProtectedRoute allowedRoles={['HOSPITAL', 'ADMIN', 'BLOOD_BANK']}>
                       <BloodRequests />
                     </RoleProtectedRoute>
                   }

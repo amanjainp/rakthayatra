@@ -19,6 +19,10 @@ export class AuthService {
     const role = await prisma.role.findUnique({
       where: { name: roleName.toUpperCase() },
     });
+    if (roleName.toUpperCase() === 'PATIENT' || roleName.toUpperCase() === 'RECIPIENT') {
+      throw new Error('Registration for the Recipient/Patient role is no longer permitted.');
+    }
+
     if (!role) {
       throw new Error(`Role ${roleName} does not exist in the system.`);
     }

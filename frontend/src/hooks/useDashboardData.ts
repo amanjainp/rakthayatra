@@ -154,33 +154,12 @@ export const useDonorDashboardData = (userId?: string) => {
   });
 };
 
-// --- PATIENT DASHBOARD ---
+// --- PATIENT DASHBOARD (Deprecated - Role Removed) ---
 export const usePatientDashboardData = () => {
-  return useQuery({
-    queryKey: ['patientDashboard'],
-    queryFn: async () => {
-      try {
-        const requestsRes = await apiClient.get('/requests').catch(() => null);
-        const reqs = requestsRes?.data?.data || [];
-
-        return {
-          metrics: [
-            { label: 'My Active Requests', value: reqs.filter((r: any) => r.status === 'PENDING' || r.status === 'APPROVED').length || 1, change: '1 in progress', changeType: 'danger' },
-            { label: 'Total Fulfilled Requests', value: reqs.filter((r: any) => r.status === 'FULFILLED').length || 4, change: 'Matched from inventory', changeType: 'success' },
-            { label: 'Average Match Time', value: '24 mins', change: 'FAANG-grade matching', changeType: 'increase' },
-            { label: 'Notifications Received', value: 7, change: 'Live SMS/Push channels', changeType: 'info' },
-          ] as MetricCard[],
-          activities: [
-            { id: '1', title: 'Emergency Blood Request Match', subtitle: '3 compatible donors alerted nearby.', time: '10 mins ago', status: 'success' },
-            { id: '2', title: 'Blood Request Submitted', subtitle: 'Submitted request for 2 units AB- blood.', time: '1 hour ago', status: 'info' },
-            { id: '3', title: 'Request Completed', subtitle: 'Fulfillment matches allocated from Blood Bank A.', time: 'Yesterday', status: 'success' },
-          ] as RecentActivity[],
-        };
-      } catch {
-        return { metrics: [], activities: [] };
-      }
-    },
-  });
+  return {
+    data: { metrics: [], activities: [] },
+    isLoading: false,
+  };
 };
 
 // --- HOSPITAL DASHBOARD ---

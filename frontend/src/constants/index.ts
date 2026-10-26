@@ -52,7 +52,7 @@ export const API_BASE_URL = normalizeApiUrl(rawBaseUrl);
 export const ROLE_DASHBOARDS: Record<Role, string> = {
   ADMIN: '/admin/dashboard',
   DONOR: '/donor/dashboard',
-  PATIENT: '/patient/dashboard',
+  PATIENT: '/access-denied',
   HOSPITAL: '/hospital/dashboard',
   BLOOD_BANK: '/blood-bank/dashboard',
 };

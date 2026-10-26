@@ -38,6 +38,11 @@ export const Register: React.FC = () => {
     try {
       const { email, password, role, fullName, phone, ...rest } = data;
       
+      if ((role as string) === 'PATIENT') {
+        toast.error('Recipient/Patient registration has been removed.');
+        return;
+      }
+
       // Structure details payload matching backend requirements
       const details: Record<string, any> = { fullName, phone };
       if (role === 'DONOR') {
@@ -95,10 +100,9 @@ export const Register: React.FC = () => {
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400 text-center">
             Select Your Role
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {[
               { id: 'DONOR', label: 'Blood Donor', desc: 'Donate blood to save lives' },
-              { id: 'PATIENT', label: 'Recipient/Patient', desc: 'Request blood batches' },
               { id: 'HOSPITAL', label: 'Hospital Facility', desc: 'Coordinate clinical supply' },
               { id: 'BLOOD_BANK', label: 'Blood Bank', desc: 'Manage stock inventories' },
             ].map((r) => (

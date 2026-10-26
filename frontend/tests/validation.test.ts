@@ -129,5 +129,16 @@ describe('Validation Schemas Unit Tests', () => {
       });
       expect(missingLicense.success).toBe(false);
     });
+
+    it('should reject registration for removed PATIENT role', () => {
+      const invalidPatient = registerSchema.safeParse({
+        email: 'patient@link.org',
+        password: 'Password123!',
+        role: 'PATIENT',
+        fullName: 'Jane Doe',
+        phone: '9876543210',
+      });
+      expect(invalidPatient.success).toBe(false);
+    });
   });
 });

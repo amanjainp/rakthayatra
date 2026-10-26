@@ -107,6 +107,23 @@ describe('Authentication Module API Tests', () => {
       expect(response.body.data.userId).toBe('user-1');
       expect(response.body.data.otp).toBeDefined();
     });
+
+    it('should reject registration for PATIENT role', async () => {
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'recipient@donor.org',
+          password: 'Password@1234',
+          role: 'PATIENT',
+          details: {
+            fullName: 'Jane Recipient',
+            phone: '+919876543210',
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
   });
 
   describe('POST /api/auth/login', () => {

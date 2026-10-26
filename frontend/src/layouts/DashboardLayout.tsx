@@ -63,9 +63,6 @@ export const DashboardLayout: React.FC = () => {
       HOSPITAL: [
         { name: 'Blood Requests', path: '/requests', icon: InboxIcon },
       ],
-      PATIENT: [
-        { name: 'My Blood Requests', path: '/requests', icon: InboxIcon },
-      ],
     };
 
     return [...commonLinks, ...(roleLinks[user?.role || 'DONOR'] || [])];
