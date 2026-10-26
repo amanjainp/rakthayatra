@@ -21,6 +21,9 @@ import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
 
+// Trust reverse proxies (e.g. Render, Nginx) so req.ip and rate limiters receive the real client IP
+app.set('trust proxy', 1);
+
 // Apply Logging context middleware first to set request/correlation IDs
 app.use(loggingMiddleware);
 
