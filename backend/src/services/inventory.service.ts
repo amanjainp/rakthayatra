@@ -1,4 +1,4 @@
-import { PrismaClient, BloodInventory, BloodGroup, InventoryStatus } from '@prisma/client';
+import { PrismaClient, BloodInventory, BloodGroup, BloodComponent, InventoryStatus } from '@prisma/client';
 import { InventoryRepository } from '../repositories/inventory.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
 import { BloodBankRepository } from '../repositories/blood-bank.repository';
@@ -15,10 +15,15 @@ export class InventoryService {
    */
   async registerBloodUnit(
     data: {
-      bloodBankId: string;
+      bloodBankId?: string;
+      hospitalId?: string;
       bloodGroup: BloodGroup;
+      componentType?: BloodComponent;
       unitsCount: number;
       expiryDate: Date;
+      collectionDate?: Date;
+      batchNumber?: string;
+      storageTemp?: string;
       status?: InventoryStatus;
     },
     userId?: string
@@ -38,38 +43,55 @@ export class InventoryService {
       const auditLogRepo = new AuditLogRepository(tx as any);
       const bloodBankRepo = new BloodBankRepository(tx as any);
 
-      // Verify blood bank exists
-      const bloodBank = await bloodBankRepo.findById(data.bloodBankId);
-      if (!bloodBank) {
-        throw new NotFoundError('Target Blood Bank profile not found.');
-      }
+        if (data.bloodBankId) {
+          const bloodBank = await bloodBankRepo.findById(data.bloodBankId);
+          if (!bloodBank) {
+            throw new NotFoundError('Target Blood Bank profile not found.');
+          }
+        } else if (data.hospitalId) {
+          const hospital = await (tx as any).hospitalProfile?.findUnique({
+            where: { id: data.hospitalId },
+          });
+          if (!hospital) {
+            throw new NotFoundError('Target Hospital profile not found.');
+          }
+        } else {
+          throw new BadRequestError('Either bloodBankId or hospitalId is required.');
+        }
 
-      // Create unit record
-      const record = await inventoryRepo.create({
-        bloodBank: { connect: { id: data.bloodBankId } },
-        bloodGroup: data.bloodGroup,
-        unitsCount: data.unitsCount,
-        expiryDate: new Date(data.expiryDate),
-        status: data.status || 'AVAILABLE',
-      });
-
-      // Write audit log
-      await auditLogRepo.create({
-        user: userId ? { connect: { id: userId } } : undefined,
-        action: 'REGISTER_BLOOD_UNIT',
-        details: {
-          inventoryId: record.id,
-          bloodBankId: data.bloodBankId,
+        // Create unit record
+        const record = await inventoryRepo.create({
+          ...(data.bloodBankId ? { bloodBank: { connect: { id: data.bloodBankId } } } : {}),
+          ...(data.hospitalId ? { hospital: { connect: { id: data.hospitalId } } } : {}),
           bloodGroup: data.bloodGroup,
+          ...(data.componentType ? { componentType: data.componentType } : {}),
           unitsCount: data.unitsCount,
-        },
-      });
+          expiryDate: new Date(data.expiryDate),
+          ...(data.collectionDate ? { collectionDate: new Date(data.collectionDate) } : {}),
+          ...(data.batchNumber ? { batchNumber: data.batchNumber } : {}),
+          ...(data.storageTemp ? { storageTemp: data.storageTemp } : {}),
+          status: data.status || 'AVAILABLE',
+        });
 
-      return record;
-    });
+        // Write audit log
+        await auditLogRepo.create({
+          user: userId ? { connect: { id: userId } } : undefined,
+          action: 'REGISTER_BLOOD_UNIT',
+          details: {
+            inventoryId: record.id,
+            bloodBankId: data.bloodBankId,
+            hospitalId: data.hospitalId,
+            bloodGroup: data.bloodGroup,
+            componentType: data.componentType || 'WHOLE_BLOOD',
+            unitsCount: data.unitsCount,
+          },
+        });
+
+        return record;
+      });
 
     // Invalidate Redis stock cache
-    await this.invalidateCache(data.bloodBankId);
+    await this.invalidateCache(data.bloodBankId || data.hospitalId);
     return inventory;
   }
 
@@ -129,8 +151,10 @@ export class InventoryService {
 
           // Create new reserved record batch
           reservedRecord = await inventoryRepo.create({
-            bloodBank: { connect: { id: inventory.bloodBankId } },
+            ...(inventory.bloodBankId ? { bloodBank: { connect: { id: inventory.bloodBankId } } } : {}),
+            ...(inventory.hospitalId ? { hospital: { connect: { id: inventory.hospitalId } } } : {}),
             bloodGroup: inventory.bloodGroup,
+            ...(inventory.componentType ? { componentType: inventory.componentType } : {}),
             unitsCount: data.unitsToReserve,
             expiryDate: inventory.expiryDate,
             status: 'RESERVED',
@@ -146,6 +170,7 @@ export class InventoryService {
             reservedInventoryId: reservedRecord.id,
             unitsReserved: data.unitsToReserve,
             bloodBankId: inventory.bloodBankId,
+            hospitalId: inventory.hospitalId,
           },
         });
 
@@ -154,7 +179,7 @@ export class InventoryService {
       });
 
       // Invalidate Redis stock cache
-      await this.invalidateCache(reserved.bloodBankId);
+      await this.invalidateCache(reserved.bloodBankId || reserved.hospitalId);
       return reserved;
     } catch (error) {
       metricsService.recordReservationFailure();
@@ -192,6 +217,7 @@ export class InventoryService {
           inventoryId,
           unitsReleased: inventory.unitsCount,
           bloodBankId: inventory.bloodBankId,
+          hospitalId: inventory.hospitalId,
         },
       });
 
@@ -199,7 +225,7 @@ export class InventoryService {
     });
 
     // Invalidate Redis stock cache
-    await this.invalidateCache(released.bloodBankId);
+    await this.invalidateCache(released.bloodBankId || released.hospitalId);
     return released;
   }
 
@@ -230,6 +256,7 @@ export class InventoryService {
           details: {
             inventoryId: batch.id,
             bloodBankId: batch.bloodBankId,
+            hospitalId: batch.hospitalId,
             bloodGroup: batch.bloodGroup,
             unitsExpired: batch.unitsCount,
           },
@@ -249,7 +276,7 @@ export class InventoryService {
     });
 
     // Invalidate caches for modified blood banks
-    const bankIds = Array.from(new Set(expiredList.map((e) => e.bloodBankId)));
+    const bankIds = Array.from(new Set(expiredList.map((e) => e.bloodBankId).filter(Boolean) as string[]));
     for (const bankId of bankIds) {
       await this.invalidateCache(bankId);
     }
@@ -260,7 +287,7 @@ export class InventoryService {
 
     return expiredList;
   }
-  
+
   /**
    * Automatically releases reservations that have been in RESERVED status for longer than 24 hours.
    */
@@ -289,6 +316,7 @@ export class InventoryService {
             inventoryId: batch.id,
             unitsReleased: batch.unitsCount,
             bloodBankId: batch.bloodBankId,
+            hospitalId: batch.hospitalId,
           },
         }));
 
@@ -306,7 +334,7 @@ export class InventoryService {
     });
 
     // Invalidate caches
-    const bankIds = Array.from(new Set(releasedList.map((e) => e.bloodBankId)));
+    const bankIds = Array.from(new Set(releasedList.map((e) => e.bloodBankId).filter(Boolean) as string[]));
     for (const bankId of bankIds) {
       await this.invalidateCache(bankId);
     }
@@ -323,7 +351,9 @@ export class InventoryService {
    */
   async searchInventory(params: {
     bloodBankId?: string;
+    hospitalId?: string;
     bloodGroup?: BloodGroup;
+    componentType?: BloodComponent;
     status?: InventoryStatus;
     page?: number;
     limit?: number;
@@ -343,6 +373,9 @@ export class InventoryService {
           let filtered = allUnits;
           if (params.bloodGroup) {
             filtered = filtered.filter((u) => u.bloodGroup === params.bloodGroup);
+          }
+          if (params.componentType) {
+            filtered = filtered.filter((u) => u.componentType === params.componentType);
           }
           if (params.status) {
             filtered = filtered.filter((u) => u.status === params.status);
@@ -368,8 +401,14 @@ export class InventoryService {
     if (params.bloodBankId) {
       whereClause.bloodBankId = params.bloodBankId;
     }
+    if (params.hospitalId) {
+      whereClause.hospitalId = params.hospitalId;
+    }
     if (params.bloodGroup) {
       whereClause.bloodGroup = params.bloodGroup;
+    }
+    if (params.componentType) {
+      whereClause.componentType = params.componentType;
     }
     if (params.status) {
       whereClause.status = params.status;
@@ -452,6 +491,7 @@ export class InventoryService {
 
     const bloodBanksMap = new Map<string, any>();
     for (const item of availableItems) {
+      if (!item.bloodBank) continue;
       const bankId = item.bloodBank.id;
       if (!bloodBanksMap.has(bankId)) {
         bloodBanksMap.set(bankId, {
@@ -487,7 +527,8 @@ export class InventoryService {
   /**
    * Helper to invalidate caches.
    */
-  private async invalidateCache(bloodBankId: string) {
+  private async invalidateCache(bloodBankId?: string | null) {
+    if (!bloodBankId) return;
     try {
       await redisService.del(`inventory:${bloodBankId}`);
       logger.debug(`Invalidated cache key inventory:${bloodBankId}`);

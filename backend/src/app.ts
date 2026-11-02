@@ -14,6 +14,7 @@ import facilityRoutes from './routes/facility.routes';
 import chatbotRoutes from './routes/chatbot.routes';
 import appointmentRoutes from './routes/appointment.routes';
 import notificationRoutes from './routes/notification.routes';
+import redistributionRoutes from './routes/redistribution.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
@@ -82,6 +83,7 @@ app.use('/api/facilities', facilityRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/redistribution', redistributionRoutes);
 
 // Root API Welcome / Status probe
 const rootStatusHandler = (req: Request, res: Response) => {
@@ -107,6 +109,7 @@ const rootStatusHandler = (req: Request, res: Response) => {
       requests: '/api/requests',
       eligibility: '/api/eligibility',
       camps: '/api/camps',
+      redistribution: '/api/redistribution',
     },
   });
 };
