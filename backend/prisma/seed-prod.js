@@ -311,7 +311,7 @@ async function main() {
               unitsCount: 12,
               expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
               batchNumber: 'LOT-MNP-FFP-201',
-              storageTemp: '≤ -18°C to -30°C',
+              storageTemp: '<= -18C to -30C',
               status: InventoryStatus ? InventoryStatus.AVAILABLE : 'AVAILABLE',
             },
           ],
