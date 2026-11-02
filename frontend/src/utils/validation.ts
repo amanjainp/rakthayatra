@@ -39,7 +39,7 @@ export const registerSchema = z
     role: z.enum(['ADMIN', 'DONOR', 'HOSPITAL', 'BLOOD_BANK']),
     fullName: z.string().min(2, 'Full Name must be at least 2 characters long.'),
     phone: z.string().min(10, 'Phone number must be at least 10 digits long.'),
-    
+
     // Donor Details
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'Not Specified']).optional(),
     dob: z.string().optional(),
@@ -118,7 +118,7 @@ export const createRedistributionRequestSchema = z
 
 export const dispatchTransferSchema = z.object({
   coldChainVerified: z.literal(true, {
-    errorMap: () => ({ message: 'Cold-chain verification is mandatory before dispatch' }),
+    message: 'Cold-chain verification is mandatory before dispatch',
   }),
   temperatureCelsius: z.number().min(-80).max(30),
   transportContainerId: z.string().min(2).optional(),
