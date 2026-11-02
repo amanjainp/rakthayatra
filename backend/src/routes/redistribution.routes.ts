@@ -98,6 +98,14 @@ router.get(
   (req, res) => redistributionController.findMatches(req, res)
 );
 
+router.post(
+  '/requests/:id/cancel',
+  authenticate,
+  requireRoles(allowedRoles),
+  redistributionMutationLimiter,
+  (req, res) => redistributionController.cancelRequest(req, res)
+);
+
 // Transfer Proposals
 router.post(
   '/requests/:id/proposals',

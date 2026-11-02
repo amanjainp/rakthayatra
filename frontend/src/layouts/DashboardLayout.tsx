@@ -71,7 +71,6 @@ export const DashboardLayout: React.FC = () => {
       HOSPITAL: [
         { name: 'Blood Redistribution', path: '/hospital/redistribution', icon: ArrowsRightLeftIcon },
         { name: 'Blood Requests', path: '/requests', icon: InboxIcon },
-        { name: 'Inventory Stock', path: '/inventory', icon: QueueListIcon },
       ],
     };
 

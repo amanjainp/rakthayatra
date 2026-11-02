@@ -369,6 +369,26 @@ export const useCompleteTransfer = () => {
   });
 };
 
+export const useCancelRedistributionRequest = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { requestId: string; reason: string }) => {
+      const res = await apiClient.post(`/redistribution/requests/${payload.requestId}/cancel`, {
+        reason: payload.reason,
+      });
+      return res.data.data.request;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['redistribution'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      toast.success('Redistribution request cancelled.');
+    },
+    onError: (err: any) => {
+      toast.error(extractApiError(err, 'Failed to cancel redistribution request.'));
+    },
+  });
+};
+
 export const useCancelTransfer = () => {
   const queryClient = useQueryClient();
   return useMutation({

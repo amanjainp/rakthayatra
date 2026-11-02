@@ -486,6 +486,33 @@ export class RedistributionController {
   }
 
   /**
+   * POST /api/redistribution/requests/:id/cancel
+   */
+  async cancelRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const parsed = cancelTransferSchema.parse(req.body);
+      const correlationId = (req.headers['x-correlation-id'] as string) || undefined;
+
+      const requestRecord = await redistributionService.cancelRequest(
+        id,
+        req.user!.userId,
+        req.user!.role,
+        parsed,
+        correlationId
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Redistribution request cancelled and any reserved units released.',
+        data: { request: requestRecord },
+      });
+    } catch (error) {
+      return handleControllerError(res, error);
+    }
+  }
+
+  /**
    * GET /api/redistribution/history
    */
   async getHistory(req: AuthenticatedRequest, res: Response) {

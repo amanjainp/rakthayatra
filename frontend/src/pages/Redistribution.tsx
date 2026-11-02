@@ -19,11 +19,13 @@ import {
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
+import { useAuth } from '../hooks/useAuth';
 import {
   useRedistributionDashboard,
   useInstitutionInventory,
   useAddInstitutionInventory,
   useCreateRedistributionRequest,
+  useCancelRedistributionRequest,
   useRedistributionMatches,
   useCreateRedistributionProposal,
   useApproveRedistributionProposal,
@@ -86,6 +88,7 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
 };
 
 export const Redistribution: React.FC = () => {
+  const { user } = useAuth();
   // Active tab navigation
   const [activeTab, setActiveTab] = useState<
     'requests' | 'incoming' | 'transfers' | 'inventory' | 'history' | 'analytics'
@@ -122,6 +125,7 @@ export const Redistribution: React.FC = () => {
 
   // Mutations
   const createRequestMutation = useCreateRedistributionRequest();
+  const cancelRequestMutation = useCancelRedistributionRequest();
   const addInventoryMutation = useAddInstitutionInventory();
   const createProposalMutation = useCreateRedistributionProposal();
   const approveProposalMutation = useApproveRedistributionProposal();
@@ -187,6 +191,7 @@ export const Redistribution: React.FC = () => {
 
   // Cancel Modal State
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [cancelRequestTarget, setCancelRequestTarget] = useState<any | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
   // Complete Discrepancy Transfer Modal State
@@ -363,6 +368,21 @@ export const Redistribution: React.FC = () => {
     }
   };
 
+  const handleCancelRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelRequestTarget) return;
+    try {
+      await cancelRequestMutation.mutateAsync({
+        requestId: cancelRequestTarget.id,
+        reason: cancelReason,
+      });
+      setCancelRequestTarget(null);
+      setCancelReason('');
+    } catch {
+      // handled by mutation hook
+    }
+  };
+
   const handleCompleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!completeTarget) return;
@@ -519,8 +539,8 @@ export const Redistribution: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${active
-                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-slate-800'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/25'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-slate-800'
                 }`}
             >
               <Icon className="w-4 h-4" />
@@ -715,14 +735,36 @@ export const Redistribution: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedMatchRequestId(req.id)}
-                        className="text-[11px] py-1.5 px-3 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 mr-1 inline" />
-                        Discover Sources
-                      </Button>
+                      {(req.isOwnRequest || institution?.role === 'ADMIN') && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setSelectedMatchRequestId(req.id)}
+                          className="text-[11px] py-1.5 px-3 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 mr-1 inline" />
+                          Discover Sources
+                        </Button>
+                      )}
+                      {(req.isOwnRequest || institution?.role === 'ADMIN') &&
+                        [
+                          'REQUESTED',
+                          'MATCHING',
+                          'PROPOSED',
+                          'AWAITING_APPROVAL',
+                          'APPROVED',
+                          'RESERVED',
+                        ].includes(req.status) && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setCancelRequestTarget(req);
+                              setCancelReason('');
+                            }}
+                            className="text-[11px] py-1.5 px-3 border-rose-500/30 text-rose-400"
+                          >
+                            Cancel Request
+                          </Button>
+                        )}
                       {!req.isOwnRequest &&
                         ['REQUESTED', 'MATCHING', 'PROPOSED', 'AWAITING_APPROVAL'].includes(req.status) && (
                           <Button
@@ -831,46 +873,51 @@ export const Redistribution: React.FC = () => {
                         <td className="py-3 px-4">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${prop.status === 'APPROVED'
-                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                : prop.status === 'REJECTED'
-                                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : prop.status === 'REJECTED'
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                               }`}
                           >
                             {prop.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right space-x-2">
-                          {prop.status === 'PENDING' && (
-                            <>
-                              <Button
-                                variant="primary"
-                                isLoading={approveProposalMutation.isPending}
-                                onClick={() =>
-                                  approveProposalMutation.mutate({
-                                    proposalId: prop.id,
-                                    notes: 'Approved via Redistribution Dashboard',
-                                  })
-                                }
-                                className="text-[11px] py-1 px-3"
-                              >
-                                Approve & Reserve Units
-                              </Button>
-                              <Button
-                                variant="outline"
-                                isLoading={rejectProposalMutation.isPending}
-                                onClick={() =>
-                                  rejectProposalMutation.mutate({
-                                    proposalId: prop.id,
-                                    reason: 'Declined by reviewing coordinator',
-                                  })
-                                }
-                                className="text-[11px] py-1 px-3 border-rose-500/30 text-rose-300"
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
+                          {prop.status === 'PENDING' &&
+                            (prop.proposedByUserId === user?.id && institution?.role !== 'ADMIN' ? (
+                              <span className="text-[10px] font-semibold text-slate-400 italic">
+                                Awaiting Counterparty Approval
+                              </span>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  isLoading={approveProposalMutation.isPending}
+                                  onClick={() =>
+                                    approveProposalMutation.mutate({
+                                      proposalId: prop.id,
+                                      notes: 'Approved via Redistribution Dashboard',
+                                    })
+                                  }
+                                  className="text-[11px] py-1 px-3"
+                                >
+                                  Approve & Reserve Units
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  isLoading={rejectProposalMutation.isPending}
+                                  onClick={() =>
+                                    rejectProposalMutation.mutate({
+                                      proposalId: prop.id,
+                                      reason: 'Declined by reviewing coordinator',
+                                    })
+                                  }
+                                  className="text-[11px] py-1 px-3 border-rose-500/30 text-rose-300"
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            ))}
                         </td>
                       </tr>
                     );
@@ -1245,10 +1292,10 @@ export const Redistribution: React.FC = () => {
                       <td className="py-3 px-4">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${item.status === 'AVAILABLE'
-                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                              : item.status === 'RESERVED'
-                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : item.status === 'RESERVED'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
                             }`}
                         >
                           {item.status}
@@ -1984,6 +2031,38 @@ export const Redistribution: React.FC = () => {
             </Button>
             <Button type="submit" variant="primary" isLoading={cancelMutation.isPending}>
               Confirm Cancellation
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 7B: CANCEL REDISTRIBUTION REQUEST */}
+      <Modal
+        isOpen={!!cancelRequestTarget}
+        onClose={() => setCancelRequestTarget(null)}
+        title="Cancel Redistribution Request"
+      >
+        <form onSubmit={handleCancelRequestSubmit} className="space-y-4 text-xs">
+          <p className="text-slate-300">
+            Cancelling this redistribution request will close all pending proposals and release any pre-dispatch reserved units back to source available stock.
+          </p>
+          <div>
+            <label className="block font-bold text-slate-300 mb-1">Cancellation Reason *</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g., Requirement fulfilled via internal donor / Surgery rescheduled"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setCancelRequestTarget(null)}>
+              Keep Request
+            </Button>
+            <Button type="submit" variant="primary" isLoading={cancelRequestMutation.isPending}>
+              Confirm Request Cancellation
             </Button>
           </div>
         </form>

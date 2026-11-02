@@ -447,6 +447,17 @@ jest.mock('@prisma/client', () => {
         dbState.proposals[idx] = { ...dbState.proposals[idx], ...data, updatedAt: new Date() };
         return hydrateProposal(dbState.proposals[idx]);
       }),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        let count = 0;
+        dbState.proposals = dbState.proposals.map((p) => {
+          if (matchWhere(p, where)) {
+            count++;
+            return { ...p, ...data, updatedAt: new Date() };
+          }
+          return p;
+        });
+        return { count };
+      }),
     },
     redistributionTransfer: {
       create: jest.fn(async ({ data }: any) => {
@@ -811,6 +822,63 @@ describe('Hospital-to-Hospital Blood Redistribution Module Tests', () => {
 
       expect(pastDateRes.status).toBe(400);
     });
+
+    it('forbids cross-institution inventory registration (HOSPITAL passing targetBloodBankId or another targetHospitalId)', async () => {
+      const spoofRes = await apiClient
+        .post('/api/redistribution/inventory')
+        .set('Authorization', `Bearer ${hospitalAToken}`)
+        .send({
+          bloodGroup: 'O_NEG',
+          componentType: 'PACKED_RBC',
+          unitsCount: 4,
+          expiryDate: new Date(Date.now() + 20 * 24 * 3600 * 1000).toISOString(),
+          targetHospitalId: hospitalBId,
+        });
+
+      expect(spoofRes.status).toBe(403);
+      expect(spoofRes.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('forbids self-approval of a proposal by the proposing institution and restricts match discovery to the destination owner', async () => {
+      const reqRes = await apiClient
+        .post('/api/redistribution/requests')
+        .set('Authorization', `Bearer ${hospitalAToken}`)
+        .send({
+          bloodGroup: 'O_NEG',
+          componentType: 'PACKED_RBC',
+          unitsRequired: 3,
+          urgency: 'URGENT',
+          requiredBy: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+          reason: 'Pediatric surgical blood reserve',
+        });
+      const requestId = reqRes.body.data.request.id;
+
+      // Hospital B (not the destination owner) cannot enumerate matches on Hospital A's request
+      const unauthorizedMatchesRes = await apiClient
+        .get(`/api/redistribution/requests/${requestId}/matches`)
+        .set('Authorization', `Bearer ${hospitalBToken}`)
+        .send();
+      expect(unauthorizedMatchesRes.status).toBe(403);
+
+      // Hospital B submits a transfer proposal
+      const propRes = await apiClient
+        .post(`/api/redistribution/requests/${requestId}/proposals`)
+        .set('Authorization', `Bearer ${hospitalBToken}`)
+        .send({
+          bloodGroup: 'O_NEG',
+          unitsProposed: 3,
+        });
+      expect(propRes.status).toBe(201);
+      const proposalId = propRes.body.data.proposal.id;
+
+      // Hospital B attempts to approve its own offer without Hospital A's consent -> must be 403 FORBIDDEN
+      const selfApproveRes = await apiClient
+        .post(`/api/redistribution/proposals/${proposalId}/approve`)
+        .set('Authorization', `Bearer ${hospitalBToken}`)
+        .send({});
+      expect(selfApproveRes.status).toBe(403);
+      expect(selfApproveRes.body.error.code).toBe('FORBIDDEN');
+    });
   });
 
   // =========================================================================
@@ -1034,6 +1102,49 @@ describe('Hospital-to-Hospital Blood Redistribution Module Tests', () => {
         .filter((i) => i.hospitalId === hospitalBId && i.status === 'AVAILABLE')
         .reduce((sum, i) => sum + i.unitsCount, 0);
       expect(availableAfterCancel).toBe(8);
+    });
+
+    it('cancels a redistribution request via POST /api/redistribution/requests/:id/cancel and releases any pre-dispatch reserved units', async () => {
+      const reqRes = await apiClient
+        .post('/api/redistribution/requests')
+        .set('Authorization', `Bearer ${hospitalAToken}`)
+        .send({
+          bloodGroup: 'O_NEG',
+          componentType: 'PACKED_RBC',
+          unitsRequired: 5,
+          urgency: 'URGENT',
+          requiredBy: new Date(Date.now() + 8 * 3600 * 1000).toISOString(),
+          reason: 'Vascular surgery standby reserve',
+        });
+      const requestId = reqRes.body.data.request.id;
+
+      const propRes = await apiClient
+        .post(`/api/redistribution/requests/${requestId}/proposals`)
+        .set('Authorization', `Bearer ${hospitalBToken}`)
+        .send({
+          bloodGroup: 'O_NEG',
+          unitsProposed: 5,
+        });
+      const proposalId = propRes.body.data.proposal.id;
+
+      await apiClient
+        .post(`/api/redistribution/proposals/${proposalId}/approve`)
+        .set('Authorization', `Bearer ${hospitalAToken}`)
+        .send({});
+
+      // Cancel at the request level before dispatch
+      const cancelReqRes = await apiClient
+        .post(`/api/redistribution/requests/${requestId}/cancel`)
+        .set('Authorization', `Bearer ${hospitalAToken}`)
+        .send({ reason: 'Patient requirement resolved via internal cross-match; cancelling request.' });
+
+      expect(cancelReqRes.status).toBe(200);
+      expect(cancelReqRes.body.data.request.status).toBe('CANCELLED');
+
+      const availableAfterReqCancel = dbState.inventory
+        .filter((i) => i.hospitalId === hospitalBId && i.status === 'AVAILABLE')
+        .reduce((sum, i) => sum + i.unitsCount, 0);
+      expect(availableAfterReqCancel).toBe(8);
     });
 
     it('flags transfer as RECEIVED with hasDiscrepancy=true (instead of silently completing) when damaged units occur', async () => {

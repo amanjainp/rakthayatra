@@ -276,8 +276,23 @@ export class RedistributionService {
     const componentType = data.componentType || 'WHOLE_BLOOD';
     const policy = compatibilityService.getStoragePolicy(componentType);
 
-    const hospitalId = inst.role === 'HOSPITAL' ? inst.hospitalId : data.targetHospitalId || null;
-    const bloodBankId = inst.role === 'BLOOD_BANK' ? inst.bloodBankId : data.targetBloodBankId || null;
+    if (
+      inst.role === 'HOSPITAL' &&
+      ((data.targetHospitalId && data.targetHospitalId !== inst.hospitalId) || data.targetBloodBankId)
+    ) {
+      throw new ForbiddenError('Cannot register inventory on behalf of another institution.');
+    }
+    if (
+      inst.role === 'BLOOD_BANK' &&
+      ((data.targetBloodBankId && data.targetBloodBankId !== inst.bloodBankId) || data.targetHospitalId)
+    ) {
+      throw new ForbiddenError('Cannot register inventory on behalf of another institution.');
+    }
+
+    const hospitalId =
+      inst.role === 'HOSPITAL' ? inst.hospitalId : inst.role === 'ADMIN' ? data.targetHospitalId || null : null;
+    const bloodBankId =
+      inst.role === 'BLOOD_BANK' ? inst.bloodBankId : inst.role === 'ADMIN' ? data.targetBloodBankId || null : null;
 
     if (!hospitalId && !bloodBankId) {
       throw new BadRequestError('Target institution (Hospital or Blood Bank) could not be determined.');
@@ -547,6 +562,12 @@ export class RedistributionService {
 
     if (!reqRecord) {
       throw new NotFoundError('Redistribution request not found.');
+    }
+
+    if (!this.isDestinationOwner(inst, reqRecord) && inst.role !== 'ADMIN') {
+      throw new ForbiddenError(
+        'Only the requesting destination institution or platform administrator can run source inventory discovery for this request.'
+      );
     }
 
     const now = new Date();
@@ -1117,11 +1138,27 @@ export class RedistributionService {
       throw new NotFoundError('Redistribution proposal not found.');
     }
 
-    // Verify authorization: either the destination institution or the source institution (or ADMIN)
+    // Verify counterparty authorization:
+    // - If the destination institution initiated the proposal (requesting stock from a matched source), only the source institution (or ADMIN) can approve it.
+    // - If the source institution initiated the proposal (offering stock to the destination), only the destination institution (or ADMIN) can approve it.
     const isDest = this.isDestinationOwner(inst, proposal.request);
     const isSource = this.isSourceOwner(inst, proposal);
     if (!isDest && !isSource && inst.role !== 'ADMIN') {
       throw new ForbiddenError('You do not have permission to approve this transfer proposal.');
+    }
+
+    if (inst.role !== 'ADMIN') {
+      const proposedByDestination = proposal.proposerUserId === proposal.request.requesterUserId;
+      if (proposedByDestination && !isSource) {
+        throw new ForbiddenError(
+          'Only the source institution holding the inventory can approve a transfer proposal requested by the destination.'
+        );
+      }
+      if (!proposedByDestination && !isDest) {
+        throw new ForbiddenError(
+          'Only the requesting destination institution can approve a stock offer submitted by a source institution.'
+        );
+      }
     }
 
     // Duplicate / idempotency guard
@@ -1415,83 +1452,91 @@ export class RedistributionService {
       throw new NotFoundError('Redistribution proposal not found.');
     }
 
-    if (
-      !this.isDestinationOwner(inst, proposal.request) &&
-      !this.isSourceOwner(inst, proposal) &&
-      inst.role !== 'ADMIN'
-    ) {
-      throw new ForbiddenError('You do not have permission to reject this proposal.');
-    }
+      const isDest = this.isDestinationOwner(inst, proposal.request);
+      const isSource = this.isSourceOwner(inst, proposal);
+      if (!isDest && !isSource && inst.role !== 'ADMIN') {
+        throw new ForbiddenError('You do not have permission to reject this proposal.');
+      }
 
-    if (proposal.status !== 'PENDING') {
-      throw new BadRequestError(`Cannot reject a proposal in ${proposal.status} status.`);
-    }
+      if (inst.role !== 'ADMIN') {
+        const proposedByDestination = proposal.proposerUserId === proposal.request.requesterUserId;
+        if (proposedByDestination && !isSource) {
+          throw new ForbiddenError('Only the counterparty source institution can reject this proposal.');
+        }
+        if (!proposedByDestination && !isDest) {
+          throw new ForbiddenError('Only the counterparty destination institution can reject this proposal.');
+        }
+      }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const p = await tx.redistributionProposal.update({
-        where: { id: proposalId },
-        data: {
-          status: 'REJECTED',
-          rejectionReason: data.reason || 'Declined by reviewing institution.',
-          reviewedByUserId: userId,
-          reviewedAt: new Date(),
-        },
-      });
+      if (proposal.status !== 'PENDING') {
+        throw new BadRequestError(`Cannot reject a proposal in ${proposal.status} status.`);
+      }
 
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: proposal.requestId,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: 'PROPOSAL_REJECTED',
-          previousState: 'AWAITING_APPROVAL',
-          newState: 'REJECTED',
-          reason: data.reason || 'Declined by reviewing institution.',
-          correlationId: correlationId || null,
-          metadata: { proposalId },
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'REJECT_REDISTRIBUTION_PROPOSAL',
-          details: {
-            proposalId,
-            requestId: proposal.requestId,
-            reason: data.reason,
+      const updated = await prisma.$transaction(async (tx) => {
+        const p = await tx.redistributionProposal.update({
+          where: { id: proposalId },
+          data: {
+            status: 'REJECTED',
+            rejectionReason: data.reason || 'Declined by reviewing institution.',
+            reviewedByUserId: userId,
+            reviewedAt: new Date(),
           },
-        },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: proposal.requestId,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'PROPOSAL_REJECTED',
+            previousState: 'AWAITING_APPROVAL',
+            newState: 'REJECTED',
+            reason: data.reason || 'Declined by reviewing institution.',
+            correlationId: correlationId || null,
+            metadata: { proposalId },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'REJECT_REDISTRIBUTION_PROPOSAL',
+            details: {
+              proposalId,
+              requestId: proposal.requestId,
+              reason: data.reason,
+            },
+          },
+        });
+
+        return p;
       });
 
-      return p;
-    });
+      await prisma.notification
+        .create({
+          data: {
+            userId: proposal.proposerUserId,
+            title: `[REJECTED] Redistribution Proposal Declined`,
+            message: `Proposal #${proposalId.slice(0, 8)} was declined. Reason: ${data.reason || 'Declined by reviewing institution.'
+              }`,
+            type: 'REDISTRIBUTION_ALERT',
+          },
+        })
+        .catch(() => null);
 
-    await prisma.notification
-      .create({
-        data: {
-          userId: proposal.proposerUserId,
-          title: `[REJECTED] Redistribution Proposal Declined`,
-          message: `Proposal #${proposalId.slice(0, 8)} was declined. Reason: ${data.reason || 'Declined by reviewing institution.'
-            }`,
-          type: 'REDISTRIBUTION_ALERT',
-        },
-      })
-      .catch(() => null);
-
-    return updated;
-  }
+      return updated;
+    }
 
   /**
    * Records authorized dispatch of reserved blood units from the source institution (Module G).
    */
   async dispatchTransfer(
-    transferId: string,
-    userId: string,
-    role: string,
-    data: {
+      transferId: string,
+      userId: string,
+      role: string,
+      data: {
       shipmentReference?: string;
       dispatcherName: string;
       unitsDispatched?: number;
@@ -1500,235 +1545,235 @@ export class RedistributionService {
       coldChainNotes?: string;
       expectedArrivalAt?: string | Date;
     },
-    correlationId?: string
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, true);
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, true);
 
-    const transfer = await prisma.redistributionTransfer.findUnique({
-      where: { id: transferId },
-      include: {
-        request: true,
-        allocations: true,
-        sourceHospital: true,
-        sourceBloodBank: true,
-        destinationHospital: true,
-        destinationBloodBank: true,
-      },
-    });
+      const transfer = await prisma.redistributionTransfer.findUnique({
+        where: { id: transferId },
+        include: {
+          request: true,
+          allocations: true,
+          sourceHospital: true,
+          sourceBloodBank: true,
+          destinationHospital: true,
+          destinationBloodBank: true,
+        },
+      });
 
-    if (!transfer) {
-      throw new NotFoundError('Redistribution transfer record not found.');
-    }
-
-    if (!this.isSourceOwner(inst, transfer)) {
-      throw new ForbiddenError('Only authorized personnel from the source institution can record shipment dispatch.');
-    }
-
-    this.validateTransition(transfer.status, 'DISPATCHED');
-
-    if (!data.temperatureCheckConfirmed) {
-      throw new BadRequestError(
-        'Mandatory storage and transport temperature verification must be confirmed before dispatching blood units.'
-      );
-    }
-
-    if (!data.dispatcherName || data.dispatcherName.trim().length < 2) {
-      throw new BadRequestError('Authorized dispatcher name is required.');
-    }
-
-    const unitsDispatched = data.unitsDispatched !== undefined ? data.unitsDispatched : transfer.unitsApproved;
-    if (unitsDispatched <= 0 || unitsDispatched > transfer.unitsApproved) {
-      throw new BadRequestError(
-        `Dispatched units (${unitsDispatched}) must be between 1 and the approved quantity (${transfer.unitsApproved}).`
-      );
-    }
-
-    const shipmentRef =
-      data.shipmentReference?.trim() ||
-      `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${transfer.id.slice(0, 6).toUpperCase()}`;
-
-    const expectedArrival = data.expectedArrivalAt
-      ? new Date(data.expectedArrivalAt)
-      : new Date(Date.now() + 60 * 60 * 1000);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const allocationInventoryIds = transfer.allocations.map((a) => a.inventoryId);
-      if (allocationInventoryIds.length > 0) {
-        await tx.bloodInventory.updateMany({
-          where: { id: { in: allocationInventoryIds } },
-          data: { status: 'DISTRIBUTED' },
-        });
+      if (!transfer) {
+        throw new NotFoundError('Redistribution transfer record not found.');
       }
 
-      await tx.redistributionAllocation.updateMany({
-        where: { transferId: transfer.id },
-        data: { status: 'DISPATCHED' },
-      });
+      if (!this.isSourceOwner(inst, transfer)) {
+        throw new ForbiddenError('Only authorized personnel from the source institution can record shipment dispatch.');
+      }
 
-      const updatedTransfer = await tx.redistributionTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: 'DISPATCHED',
-          unitsDispatched,
-          shipmentReference: shipmentRef,
-          dispatcherName: data.dispatcherName.trim(),
-          dispatchedByUserId: userId,
-          dispatchedAt: new Date(),
-          transportVehicleDetails: data.transportVehicleDetails?.trim() || 'Authorized Medical Courier',
-          temperatureCheckConfirmed: true,
-          coldChainNotes: data.coldChainNotes?.trim() || null,
-          expectedArrivalAt: expectedArrival,
-        },
-        include: {
-          allocations: true,
-          sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
-          sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
-          destinationHospital: { select: { id: true, name: true, city: true, phone: true } },
-          destinationBloodBank: { select: { id: true, name: true, city: true, phone: true } },
-        },
-      });
+      this.validateTransition(transfer.status, 'DISPATCHED');
 
-      await tx.redistributionRequest.update({
-        where: { id: transfer.requestId },
-        data: { status: 'DISPATCHED' },
-      });
+      if (!data.temperatureCheckConfirmed) {
+        throw new BadRequestError(
+          'Mandatory storage and transport temperature verification must be confirmed before dispatching blood units.'
+        );
+      }
 
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: transfer.requestId,
-          transferId: transfer.id,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: 'TRANSFER_DISPATCHED',
-          previousState: transfer.status,
-          newState: 'DISPATCHED',
-          reason: `Dispatched ${unitsDispatched} units via ref ${shipmentRef}`,
-          correlationId: correlationId || null,
-          metadata: {
-            shipmentReference: shipmentRef,
-            dispatcherName: data.dispatcherName,
+      if (!data.dispatcherName || data.dispatcherName.trim().length < 2) {
+        throw new BadRequestError('Authorized dispatcher name is required.');
+      }
+
+      const unitsDispatched = data.unitsDispatched !== undefined ? data.unitsDispatched : transfer.unitsApproved;
+      if (unitsDispatched <= 0 || unitsDispatched > transfer.unitsApproved) {
+        throw new BadRequestError(
+          `Dispatched units (${unitsDispatched}) must be between 1 and the approved quantity (${transfer.unitsApproved}).`
+        );
+      }
+
+      const shipmentRef =
+        data.shipmentReference?.trim() ||
+        `SHP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${transfer.id.slice(0, 6).toUpperCase()}`;
+
+      const expectedArrival = data.expectedArrivalAt
+        ? new Date(data.expectedArrivalAt)
+        : new Date(Date.now() + 60 * 60 * 1000);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const allocationInventoryIds = transfer.allocations.map((a) => a.inventoryId);
+        if (allocationInventoryIds.length > 0) {
+          await tx.bloodInventory.updateMany({
+            where: { id: { in: allocationInventoryIds } },
+            data: { status: 'DISTRIBUTED' },
+          });
+        }
+
+        await tx.redistributionAllocation.updateMany({
+          where: { transferId: transfer.id },
+          data: { status: 'DISPATCHED' },
+        });
+
+        const updatedTransfer = await tx.redistributionTransfer.update({
+          where: { id: transfer.id },
+          data: {
+            status: 'DISPATCHED',
             unitsDispatched,
-            transportVehicleDetails: data.transportVehicleDetails,
+            shipmentReference: shipmentRef,
+            dispatcherName: data.dispatcherName.trim(),
+            dispatchedByUserId: userId,
+            dispatchedAt: new Date(),
+            transportVehicleDetails: data.transportVehicleDetails?.trim() || 'Authorized Medical Courier',
             temperatureCheckConfirmed: true,
+            coldChainNotes: data.coldChainNotes?.trim() || null,
+            expectedArrivalAt: expectedArrival,
           },
-        },
-      });
+          include: {
+            allocations: true,
+            sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
+            sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+            destinationHospital: { select: { id: true, name: true, city: true, phone: true } },
+            destinationBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+          },
+        });
 
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'DISPATCH_REDISTRIBUTION_TRANSFER',
-          details: {
+        await tx.redistributionRequest.update({
+          where: { id: transfer.requestId },
+          data: { status: 'DISPATCHED' },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: transfer.requestId,
             transferId: transfer.id,
-            shipmentReference: shipmentRef,
-            unitsDispatched,
-            dispatcherName: data.dispatcherName,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'TRANSFER_DISPATCHED',
+            previousState: transfer.status,
+            newState: 'DISPATCHED',
+            reason: `Dispatched ${unitsDispatched} units via ref ${shipmentRef}`,
+            correlationId: correlationId || null,
+            metadata: {
+              shipmentReference: shipmentRef,
+              dispatcherName: data.dispatcherName,
+              unitsDispatched,
+              transportVehicleDetails: data.transportVehicleDetails,
+              temperatureCheckConfirmed: true,
+            },
           },
-        },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'DISPATCH_REDISTRIBUTION_TRANSFER',
+            details: {
+              transferId: transfer.id,
+              shipmentReference: shipmentRef,
+              unitsDispatched,
+              dispatcherName: data.dispatcherName,
+            },
+          },
+        });
+
+        return updatedTransfer;
       });
 
-      return updatedTransfer;
-    });
+      if (transfer.sourceBloodBankId) {
+        await redisService.del(`inventory:${transfer.sourceBloodBankId}`).catch(() => null);
+      }
 
-    if (transfer.sourceBloodBankId) {
-      await redisService.del(`inventory:${transfer.sourceBloodBankId}`).catch(() => null);
+      // Notify destination institution
+      await prisma.notification
+        .create({
+          data: {
+            userId: transfer.request.requesterUserId,
+            title: `[DISPATCHED] Shipment ${shipmentRef} Dispatched`,
+            message: `${unitsDispatched} units of ${transfer.bloodGroup.replace('_', ' ')} (${transfer.componentType}) have been dispatched by ${data.dispatcherName}. Expected arrival: ${expectedArrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+            type: 'REDISTRIBUTION_ALERT',
+          },
+        })
+        .catch(() => null);
+
+      return updated;
     }
-
-    // Notify destination institution
-    await prisma.notification
-      .create({
-        data: {
-          userId: transfer.request.requesterUserId,
-          title: `[DISPATCHED] Shipment ${shipmentRef} Dispatched`,
-          message: `${unitsDispatched} units of ${transfer.bloodGroup.replace('_', ' ')} (${transfer.componentType}) have been dispatched by ${data.dispatcherName}. Expected arrival: ${expectedArrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
-          type: 'REDISTRIBUTION_ALERT',
-        },
-      })
-      .catch(() => null);
-
-    return updated;
-  }
 
   /**
    * Records an authorized manual in-transit update (Module G).
    */
   async markInTransit(
-    transferId: string,
-    userId: string,
-    role: string,
-    data: {
+      transferId: string,
+      userId: string,
+      role: string,
+      data: {
       inTransitNotes?: string;
       expectedArrivalAt?: string | Date;
     },
-    correlationId?: string
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, false);
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, false);
 
-    const transfer = await prisma.redistributionTransfer.findUnique({
-      where: { id: transferId },
-      include: { request: true },
-    });
-
-    if (!transfer) {
-      throw new NotFoundError('Redistribution transfer not found.');
-    }
-
-    if (!this.isSourceOwner(inst, transfer) && !this.isDestinationOwner(inst, transfer)) {
-      throw new ForbiddenError('Not authorized to update transit status for this transfer.');
-    }
-
-    if (transfer.status !== 'DISPATCHED' && transfer.status !== 'IN_TRANSIT') {
-      this.validateTransition(transfer.status, 'IN_TRANSIT');
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const t = await tx.redistributionTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: 'IN_TRANSIT',
-          inTransitUpdatedAt: new Date(),
-          inTransitNotes: data.inTransitNotes?.trim() || 'Manual checkpoint update: Shipment in transit.',
-          ...(data.expectedArrivalAt ? { expectedArrivalAt: new Date(data.expectedArrivalAt) } : {}),
-        },
+      const transfer = await prisma.redistributionTransfer.findUnique({
+        where: { id: transferId },
+        include: { request: true },
       });
 
-      await tx.redistributionRequest.update({
-        where: { id: transfer.requestId },
-        data: { status: 'IN_TRANSIT' },
+      if (!transfer) {
+        throw new NotFoundError('Redistribution transfer not found.');
+      }
+
+      if (!this.isSourceOwner(inst, transfer) && !this.isDestinationOwner(inst, transfer)) {
+        throw new ForbiddenError('Not authorized to update transit status for this transfer.');
+      }
+
+      if (transfer.status !== 'DISPATCHED' && transfer.status !== 'IN_TRANSIT') {
+        this.validateTransition(transfer.status, 'IN_TRANSIT');
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const t = await tx.redistributionTransfer.update({
+          where: { id: transfer.id },
+          data: {
+            status: 'IN_TRANSIT',
+            inTransitUpdatedAt: new Date(),
+            inTransitNotes: data.inTransitNotes?.trim() || 'Manual checkpoint update: Shipment in transit.',
+            ...(data.expectedArrivalAt ? { expectedArrivalAt: new Date(data.expectedArrivalAt) } : {}),
+          },
+        });
+
+        await tx.redistributionRequest.update({
+          where: { id: transfer.requestId },
+          data: { status: 'IN_TRANSIT' },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: transfer.requestId,
+            transferId: transfer.id,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'TRANSFER_IN_TRANSIT_UPDATE',
+            previousState: transfer.status,
+            newState: 'IN_TRANSIT',
+            reason: data.inTransitNotes || 'Manual in-transit status update.',
+            correlationId: correlationId || null,
+          },
+        });
+
+        return t;
       });
 
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: transfer.requestId,
-          transferId: transfer.id,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: 'TRANSFER_IN_TRANSIT_UPDATE',
-          previousState: transfer.status,
-          newState: 'IN_TRANSIT',
-          reason: data.inTransitNotes || 'Manual in-transit status update.',
-          correlationId: correlationId || null,
-        },
-      });
-
-      return t;
-    });
-
-    return updated;
-  }
+      return updated;
+    }
 
   /**
    * Records receipt at the destination institution, reconciles quantities, and credits destination inventory (Module G).
    */
   async receiveTransfer(
-    transferId: string,
-    userId: string,
-    role: string,
-    data: {
+      transferId: string,
+      userId: string,
+      role: string,
+      data: {
       unitsReceived: number;
       damagedUnits?: number;
       receiverStaffName: string;
@@ -1736,477 +1781,589 @@ export class RedistributionService {
       discrepancyReason?: string;
       autoComplete?: boolean;
     },
-    correlationId?: string
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, true);
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, true);
 
-    const transfer = await prisma.redistributionTransfer.findUnique({
-      where: { id: transferId },
-      include: {
-        request: true,
-        allocations: true,
-        sourceHospital: true,
-        sourceBloodBank: true,
-      },
-    });
+      const transfer = await prisma.redistributionTransfer.findUnique({
+        where: { id: transferId },
+        include: {
+          request: true,
+          allocations: true,
+          sourceHospital: true,
+          sourceBloodBank: true,
+        },
+      });
 
-    if (!transfer) {
-      throw new NotFoundError('Redistribution transfer not found.');
-    }
-
-    if (!this.isDestinationOwner(inst, transfer)) {
-      throw new ForbiddenError('Only authorized personnel at the receiving destination institution can confirm receipt.');
-    }
-
-    if (transfer.status === 'RECEIVED' || transfer.status === 'COMPLETED') {
-      throw new ConflictError('Receipt has already been recorded for this transfer.');
-    }
-
-    this.validateTransition(transfer.status, 'RECEIVED');
-
-    if (!Number.isInteger(data.unitsReceived) || data.unitsReceived < 0) {
-      throw new BadRequestError('Units received must be a non-negative integer.');
-    }
-
-    const dispatchedCount = transfer.unitsDispatched ?? transfer.unitsApproved;
-    if (data.unitsReceived > dispatchedCount) {
-      throw new BadRequestError(
-        `Units received (${data.unitsReceived}) cannot exceed units dispatched (${dispatchedCount}).`
-      );
-    }
-
-    if (!data.receiverStaffName || data.receiverStaffName.trim().length < 2) {
-      throw new BadRequestError('Receiving staff member name is required.');
-    }
-
-    const damagedUnits = data.damagedUnits || 0;
-    if (damagedUnits < 0 || damagedUnits > data.unitsReceived) {
-      throw new BadRequestError('Damaged units count must be between 0 and unitsReceived.');
-    }
-
-    const hasDiscrepancy =
-      data.unitsReceived !== dispatchedCount || damagedUnits > 0 || !data.conditionVerified;
-
-    if (hasDiscrepancy && (!data.discrepancyReason || data.discrepancyReason.trim().length < 3)) {
-      throw new BadRequestError(
-        'A discrepancy reason is required when received quantity differs from dispatched quantity, units are damaged, or condition check fails.'
-      );
-    }
-
-    const usableGoodUnits = data.conditionVerified ? Math.max(0, data.unitsReceived - damagedUnits) : 0;
-    // Do NOT silently mark as COMPLETED if there is a discrepancy
-    const finalStatus: RedistributionStatus =
-      !hasDiscrepancy && data.autoComplete !== false ? 'COMPLETED' : 'RECEIVED';
-
-    const storagePolicy = compatibilityService.getStoragePolicy(transfer.componentType);
-    const earliestExpiry =
-      transfer.allocations.length > 0
-        ? transfer.allocations.reduce(
-          (min, a) => (new Date(a.expiryDate) < min ? new Date(a.expiryDate) : min),
-          new Date(transfer.allocations[0].expiryDate)
-        )
-        : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // Credit usable good units to destination institution's inventory
-      let destinationInventoryRecord = null;
-      if (usableGoodUnits > 0) {
-        destinationInventoryRecord = await tx.bloodInventory.create({
-          data: {
-            hospitalId: transfer.destinationHospitalId,
-            bloodBankId: transfer.destinationBloodBankId,
-            bloodGroup: transfer.bloodGroup,
-            componentType: transfer.componentType,
-            unitsCount: usableGoodUnits,
-            expiryDate: earliestExpiry,
-            collectionDate: new Date(),
-            batchNumber: `XFER-${transfer.shipmentReference || transfer.id.slice(0, 6).toUpperCase()}`,
-            storageTemp: storagePolicy.storageTempRange,
-            status: 'AVAILABLE',
-          },
-        });
+      if (!transfer) {
+        throw new NotFoundError('Redistribution transfer not found.');
       }
 
-      await tx.redistributionAllocation.updateMany({
-        where: { transferId: transfer.id },
-        data: { status: 'RECEIVED' },
-      });
+      if (!this.isDestinationOwner(inst, transfer)) {
+        throw new ForbiddenError('Only authorized personnel at the receiving destination institution can confirm receipt.');
+      }
 
-      const updatedTransfer = await tx.redistributionTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: finalStatus,
-          unitsReceived: data.unitsReceived,
-          damagedUnits,
-          receivedByUserId: userId,
-          receiverStaffName: data.receiverStaffName.trim(),
-          receivedAt: new Date(),
-          conditionVerified: data.conditionVerified,
-          hasDiscrepancy,
-          discrepancyReason: hasDiscrepancy ? data.discrepancyReason?.trim() || 'Quantity/condition discrepancy' : null,
-          ...(finalStatus === 'COMPLETED' ? { completedAt: new Date() } : {}),
-        },
-        include: {
-          allocations: true,
-          sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
-          sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
-          destinationHospital: { select: { id: true, name: true, city: true, phone: true } },
-          destinationBloodBank: { select: { id: true, name: true, city: true, phone: true } },
-        },
-      });
+      if (transfer.status === 'RECEIVED' || transfer.status === 'COMPLETED') {
+        throw new ConflictError('Receipt has already been recorded for this transfer.');
+      }
 
-      await tx.redistributionRequest.update({
-        where: { id: transfer.requestId },
-        data: { status: finalStatus },
-      });
+      this.validateTransition(transfer.status, 'RECEIVED');
 
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: transfer.requestId,
-          transferId: transfer.id,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: hasDiscrepancy ? 'TRANSFER_RECEIVED_WITH_DISCREPANCY' : 'TRANSFER_RECEIVED_AND_RECONCILED',
-          previousState: transfer.status,
-          newState: finalStatus,
-          reason: hasDiscrepancy
-            ? `Discrepancy recorded: ${data.discrepancyReason}`
-            : `Received and reconciled ${usableGoodUnits} units in good condition.`,
-          correlationId: correlationId || null,
-          metadata: {
-            unitsDispatched: dispatchedCount,
-            unitsReceived: data.unitsReceived,
-            damagedUnits,
-            usableGoodUnitsCredited: usableGoodUnits,
-            destinationInventoryId: destinationInventoryRecord?.id || null,
-            hasDiscrepancy,
-          },
-        },
-      });
+      if (!Number.isInteger(data.unitsReceived) || data.unitsReceived < 0) {
+        throw new BadRequestError('Units received must be a non-negative integer.');
+      }
 
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: hasDiscrepancy ? 'REDISTRIBUTION_RECEIPT_DISCREPANCY' : 'RECEIVE_REDISTRIBUTION_TRANSFER',
-          details: {
-            transferId: transfer.id,
-            unitsDispatched: dispatchedCount,
-            unitsReceived: data.unitsReceived,
-            damagedUnits,
-            usableGoodUnits,
-            hasDiscrepancy,
-            discrepancyReason: data.discrepancyReason,
-          },
-        },
-      });
+      const dispatchedCount = transfer.unitsDispatched ?? transfer.unitsApproved;
+      if (data.unitsReceived > dispatchedCount) {
+        throw new BadRequestError(
+          `Units received (${data.unitsReceived}) cannot exceed units dispatched (${dispatchedCount}).`
+        );
+      }
 
-      return updatedTransfer;
-    });
+      if (!data.receiverStaffName || data.receiverStaffName.trim().length < 2) {
+        throw new BadRequestError('Receiving staff member name is required.');
+      }
 
-    if (transfer.destinationBloodBankId) {
-      await redisService.del(`inventory:${transfer.destinationBloodBankId}`).catch(() => null);
-    }
+      const damagedUnits = data.damagedUnits || 0;
+      if (damagedUnits < 0 || damagedUnits > data.unitsReceived) {
+        throw new BadRequestError('Damaged units count must be between 0 and unitsReceived.');
+      }
 
-    // Notify source institution
-    const sourceUserId = transfer.sourceHospital?.userId || transfer.sourceBloodBank?.userId;
-    if (sourceUserId) {
-      await prisma.notification
-        .create({
+      const hasDiscrepancy =
+        data.unitsReceived !== dispatchedCount || damagedUnits > 0 || !data.conditionVerified;
+
+      if (hasDiscrepancy && (!data.discrepancyReason || data.discrepancyReason.trim().length < 3)) {
+        throw new BadRequestError(
+          'A discrepancy reason is required when received quantity differs from dispatched quantity, units are damaged, or condition check fails.'
+        );
+      }
+
+      const usableGoodUnits = data.conditionVerified ? Math.max(0, data.unitsReceived - damagedUnits) : 0;
+      // Do NOT silently mark as COMPLETED if there is a discrepancy
+      const finalStatus: RedistributionStatus =
+        !hasDiscrepancy && data.autoComplete !== false ? 'COMPLETED' : 'RECEIVED';
+
+      const storagePolicy = compatibilityService.getStoragePolicy(transfer.componentType);
+      const earliestExpiry =
+        transfer.allocations.length > 0
+          ? transfer.allocations.reduce(
+            (min, a) => (new Date(a.expiryDate) < min ? new Date(a.expiryDate) : min),
+            new Date(transfer.allocations[0].expiryDate)
+          )
+          : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        // Credit usable good units to destination institution's inventory
+        let destinationInventoryRecord = null;
+        if (usableGoodUnits > 0) {
+          destinationInventoryRecord = await tx.bloodInventory.create({
+            data: {
+              hospitalId: transfer.destinationHospitalId,
+              bloodBankId: transfer.destinationBloodBankId,
+              bloodGroup: transfer.bloodGroup,
+              componentType: transfer.componentType,
+              unitsCount: usableGoodUnits,
+              expiryDate: earliestExpiry,
+              collectionDate: new Date(),
+              batchNumber: `XFER-${transfer.shipmentReference || transfer.id.slice(0, 6).toUpperCase()}`,
+              storageTemp: storagePolicy.storageTempRange,
+              status: 'AVAILABLE',
+            },
+          });
+        }
+
+        await tx.redistributionAllocation.updateMany({
+          where: { transferId: transfer.id },
+          data: { status: 'RECEIVED' },
+        });
+
+        const updatedTransfer = await tx.redistributionTransfer.update({
+          where: { id: transfer.id },
           data: {
-            userId: sourceUserId,
-            title: hasDiscrepancy
-              ? `[DISCREPANCY] Shipment ${transfer.shipmentReference || transfer.id.slice(0, 8)} Flagged for Review`
-              : `[COMPLETED] Shipment ${transfer.shipmentReference || transfer.id.slice(0, 8)} Received`,
-            message: hasDiscrepancy
-              ? `Destination recorded ${data.unitsReceived}/${dispatchedCount} units received (${damagedUnits} damaged). Reason: ${data.discrepancyReason}`
-              : `Destination confirmed receipt of ${usableGoodUnits} units in verified condition.`,
-            type: 'REDISTRIBUTION_ALERT',
+            status: finalStatus,
+            unitsReceived: data.unitsReceived,
+            damagedUnits,
+            receivedByUserId: userId,
+            receiverStaffName: data.receiverStaffName.trim(),
+            receivedAt: new Date(),
+            conditionVerified: data.conditionVerified,
+            hasDiscrepancy,
+            discrepancyReason: hasDiscrepancy ? data.discrepancyReason?.trim() || 'Quantity/condition discrepancy' : null,
+            ...(finalStatus === 'COMPLETED' ? { completedAt: new Date() } : {}),
           },
-        })
-        .catch(() => null);
-    }
+          include: {
+            allocations: true,
+            sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
+            sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+            destinationHospital: { select: { id: true, name: true, city: true, phone: true } },
+            destinationBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+          },
+        });
 
-    return updated;
-  }
+        await tx.redistributionRequest.update({
+          where: { id: transfer.requestId },
+          data: { status: finalStatus },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: transfer.requestId,
+            transferId: transfer.id,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: hasDiscrepancy ? 'TRANSFER_RECEIVED_WITH_DISCREPANCY' : 'TRANSFER_RECEIVED_AND_RECONCILED',
+            previousState: transfer.status,
+            newState: finalStatus,
+            reason: hasDiscrepancy
+              ? `Discrepancy recorded: ${data.discrepancyReason}`
+              : `Received and reconciled ${usableGoodUnits} units in good condition.`,
+            correlationId: correlationId || null,
+            metadata: {
+              unitsDispatched: dispatchedCount,
+              unitsReceived: data.unitsReceived,
+              damagedUnits,
+              usableGoodUnitsCredited: usableGoodUnits,
+              destinationInventoryId: destinationInventoryRecord?.id || null,
+              hasDiscrepancy,
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: hasDiscrepancy ? 'REDISTRIBUTION_RECEIPT_DISCREPANCY' : 'RECEIVE_REDISTRIBUTION_TRANSFER',
+            details: {
+              transferId: transfer.id,
+              unitsDispatched: dispatchedCount,
+              unitsReceived: data.unitsReceived,
+              damagedUnits,
+              usableGoodUnits,
+              hasDiscrepancy,
+              discrepancyReason: data.discrepancyReason,
+            },
+          },
+        });
+
+        return updatedTransfer;
+      });
+
+      if (transfer.destinationBloodBankId) {
+        await redisService.del(`inventory:${transfer.destinationBloodBankId}`).catch(() => null);
+      }
+
+      // Notify source institution
+      const sourceUserId = transfer.sourceHospital?.userId || transfer.sourceBloodBank?.userId;
+      if (sourceUserId) {
+        await prisma.notification
+          .create({
+            data: {
+              userId: sourceUserId,
+              title: hasDiscrepancy
+                ? `[DISCREPANCY] Shipment ${transfer.shipmentReference || transfer.id.slice(0, 8)} Flagged for Review`
+                : `[COMPLETED] Shipment ${transfer.shipmentReference || transfer.id.slice(0, 8)} Received`,
+              message: hasDiscrepancy
+                ? `Destination recorded ${data.unitsReceived}/${dispatchedCount} units received (${damagedUnits} damaged). Reason: ${data.discrepancyReason}`
+                : `Destination confirmed receipt of ${usableGoodUnits} units in verified condition.`,
+              type: 'REDISTRIBUTION_ALERT',
+            },
+          })
+          .catch(() => null);
+      }
+
+      return updated;
+    }
 
   /**
    * Completes a transfer in RECEIVED state after review/reconciliation checks succeed.
    */
   async completeTransfer(
-    transferId: string,
-    userId: string,
-    role: string,
-    data?: { resolutionNotes?: string },
-    correlationId?: string
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, true);
+      transferId: string,
+      userId: string,
+      role: string,
+      data ?: { resolutionNotes?: string },
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, true);
 
-    const transfer = await prisma.redistributionTransfer.findUnique({
-      where: { id: transferId },
-    });
-    if (!transfer) {
-      throw new NotFoundError('Redistribution transfer not found.');
-    }
-
-    if (!this.isDestinationOwner(inst, transfer) && inst.role !== 'ADMIN') {
-      throw new ForbiddenError('Only the destination institution or platform administrator can finalize completion.');
-    }
-
-    if (transfer.status === 'COMPLETED') {
-      return transfer;
-    }
-
-    this.validateTransition(transfer.status, 'COMPLETED');
-
-    if (transfer.hasDiscrepancy && (!data?.resolutionNotes || data.resolutionNotes.trim().length < 5)) {
-      throw new BadRequestError(
-        'Transfers with recorded discrepancies require resolution notes before they can be marked COMPLETED.'
-      );
-    }
-
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.redistributionTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        },
+      const transfer = await prisma.redistributionTransfer.findUnique({
+        where: { id: transferId },
       });
+      if (!transfer) {
+        throw new NotFoundError('Redistribution transfer not found.');
+      }
 
-      await tx.redistributionRequest.update({
-        where: { id: transfer.requestId },
-        data: { status: 'COMPLETED' },
+      if (!this.isDestinationOwner(inst, transfer) && inst.role !== 'ADMIN') {
+        throw new ForbiddenError('Only the destination institution or platform administrator can finalize completion.');
+      }
+
+      if (transfer.status === 'COMPLETED') {
+        return transfer;
+      }
+
+      this.validateTransition(transfer.status, 'COMPLETED');
+
+      if (transfer.hasDiscrepancy && (!data?.resolutionNotes || data.resolutionNotes.trim().length < 5)) {
+        throw new BadRequestError(
+          'Transfers with recorded discrepancies require resolution notes before they can be marked COMPLETED.'
+        );
+      }
+
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.redistributionTransfer.update({
+          where: { id: transfer.id },
+          data: {
+            status: 'COMPLETED',
+            completedAt: new Date(),
+          },
+        });
+
+        await tx.redistributionRequest.update({
+          where: { id: transfer.requestId },
+          data: { status: 'COMPLETED' },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: transfer.requestId,
+            transferId: transfer.id,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'TRANSFER_COMPLETED',
+            previousState: transfer.status,
+            newState: 'COMPLETED',
+            reason: data?.resolutionNotes || 'Transfer reconciliation verified and completed.',
+            correlationId: correlationId || null,
+          },
+        });
+
+        return updated;
       });
-
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: transfer.requestId,
-          transferId: transfer.id,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: 'TRANSFER_COMPLETED',
-          previousState: transfer.status,
-          newState: 'COMPLETED',
-          reason: data?.resolutionNotes || 'Transfer reconciliation verified and completed.',
-          correlationId: correlationId || null,
-        },
-      });
-
-      return updated;
-    });
-  }
+    }
 
   /**
    * Cancels a transfer prior to dispatch and releases reserved units back to available stock (Module F).
    */
   async cancelTransfer(
-    transferId: string,
-    userId: string,
-    role: string,
-    data: { reason: string },
-    correlationId?: string
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, false);
+      transferId: string,
+      userId: string,
+      role: string,
+      data: { reason: string },
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, false);
 
-    const transfer = await prisma.redistributionTransfer.findUnique({
-      where: { id: transferId },
-      include: {
-        request: true,
-        allocations: {
-          include: { inventory: true },
-        },
-      },
-    });
-
-    if (!transfer) {
-      throw new NotFoundError('Redistribution transfer not found.');
-    }
-
-    if (!this.isDestinationOwner(inst, transfer) && !this.isSourceOwner(inst, transfer)) {
-      throw new ForbiddenError('You do not have permission to cancel this transfer.');
-    }
-
-    if (['DISPATCHED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED'].includes(transfer.status)) {
-      throw new BadRequestError(
-        `Cannot cancel transfer in ${transfer.status} state because units have already been dispatched.`
-      );
-    }
-
-    this.validateTransition(transfer.status, 'CANCELLED');
-
-    if (!data.reason || data.reason.trim().length < 3) {
-      throw new BadRequestError('A cancellation reason is required.');
-    }
-
-    const now = new Date();
-
-    const cancelled = await prisma.$transaction(async (tx) => {
-      let unitsRestored = 0;
-      let unitsExpiredDuringReservation = 0;
-
-      for (const alloc of transfer.allocations) {
-        if (alloc.status !== 'RESERVED') continue;
-
-        const isStillUnexpired = new Date(alloc.expiryDate).getTime() > now.getTime();
-        const newInvStatus = isStillUnexpired ? 'AVAILABLE' : 'EXPIRED';
-
-        await tx.bloodInventory.update({
-          where: { id: alloc.inventoryId },
-          data: { status: newInvStatus },
-        });
-
-        await tx.redistributionAllocation.update({
-          where: { id: alloc.id },
-          data: {
-            status: 'RELEASED',
-            releasedAt: now,
+      const transfer = await prisma.redistributionTransfer.findUnique({
+        where: { id: transferId },
+        include: {
+          request: true,
+          allocations: {
+            include: { inventory: true },
           },
-        });
+        },
+      });
 
-        if (isStillUnexpired) {
-          unitsRestored += alloc.unitsAllocated;
-        } else {
-          unitsExpiredDuringReservation += alloc.unitsAllocated;
-        }
+      if (!transfer) {
+        throw new NotFoundError('Redistribution transfer not found.');
       }
 
-      const updatedTransfer = await tx.redistributionTransfer.update({
-        where: { id: transfer.id },
-        data: {
-          status: 'CANCELLED',
-          cancelledAt: now,
-          cancellationReason: data.reason.trim(),
-        },
-      });
+      if (!this.isDestinationOwner(inst, transfer) && !this.isSourceOwner(inst, transfer)) {
+        throw new ForbiddenError('You do not have permission to cancel this transfer.');
+      }
 
-      await tx.redistributionRequest.update({
-        where: { id: transfer.requestId },
-        data: { status: 'CANCELLED' },
-      });
+      if (['DISPATCHED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED'].includes(transfer.status)) {
+        throw new BadRequestError(
+          `Cannot cancel transfer in ${transfer.status} state because units have already been dispatched.`
+        );
+      }
 
-      await tx.redistributionEvent.create({
-        data: {
-          requestId: transfer.requestId,
-          transferId: transfer.id,
-          actorUserId: userId,
-          actorRole: inst.role,
-          actorInstitutionId: inst.facilityId,
-          actorInstitutionName: inst.name,
-          action: 'TRANSFER_CANCELLED_AND_RESERVATION_RELEASED',
-          previousState: transfer.status,
-          newState: 'CANCELLED',
-          reason: data.reason.trim(),
-          correlationId: correlationId || null,
-          metadata: {
-            unitsRestoredToAvailable: unitsRestored,
-            unitsFlaggedExpired: unitsExpiredDuringReservation,
+      this.validateTransition(transfer.status, 'CANCELLED');
+
+      if (!data.reason || data.reason.trim().length < 3) {
+        throw new BadRequestError('A cancellation reason is required.');
+      }
+
+      const now = new Date();
+
+      const cancelled = await prisma.$transaction(async (tx) => {
+        let unitsRestored = 0;
+        let unitsExpiredDuringReservation = 0;
+
+        for (const alloc of transfer.allocations) {
+          if (alloc.status !== 'RESERVED') continue;
+
+          const isStillUnexpired = new Date(alloc.expiryDate).getTime() > now.getTime();
+          const newInvStatus = isStillUnexpired ? 'AVAILABLE' : 'EXPIRED';
+
+          await tx.bloodInventory.update({
+            where: { id: alloc.inventoryId },
+            data: { status: newInvStatus },
+          });
+          // If this allocation was split from an original batch that is still AVAILABLE, merge units back
+          let mergedIntoOriginal = false;
+          if (isStillUnexpired && alloc.originalInventoryId && alloc.originalInventoryId !== alloc.inventoryId) {
+            const origBatch = await tx.bloodInventory.findFirst({
+              where: { id: alloc.originalInventoryId, status: 'AVAILABLE' },
+            });
+            if (origBatch) {
+              await tx.bloodInventory.update({
+                where: { id: origBatch.id },
+                data: { unitsCount: { increment: alloc.unitsAllocated } },
+              });
+              await tx.bloodInventory.update({
+                where: { id: alloc.inventoryId },
+                data: { status: 'EXPIRED', unitsCount: 0 },
+              });
+              mergedIntoOriginal = true;
+            }
+          }
+
+          if (!mergedIntoOriginal) {
+            await tx.bloodInventory.update({
+              where: { id: alloc.inventoryId },
+              data: { status: newInvStatus },
+            });
+          }
+
+          await tx.redistributionAllocation.update({
+            where: { id: alloc.id },
+            data: {
+              status: 'RELEASED',
+              releasedAt: now,
+            },
+          });
+
+          if (isStillUnexpired) {
+            unitsRestored += alloc.unitsAllocated;
+          } else {
+            unitsExpiredDuringReservation += alloc.unitsAllocated;
+          }
+        }
+
+        const updatedTransfer = await tx.redistributionTransfer.update({
+          where: { id: transfer.id },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: now,
+            cancellationReason: data.reason.trim(),
           },
-        },
-      });
+        });
 
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'CANCEL_REDISTRIBUTION_TRANSFER',
-          details: {
-            transferId: transfer.id,
+        await tx.redistributionRequest.update({
+          where: { id: transfer.requestId },
+          data: { status: 'CANCELLED' },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
             requestId: transfer.requestId,
-            reason: data.reason,
-            unitsRestored,
-            unitsExpiredDuringReservation,
+            transferId: transfer.id,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'TRANSFER_CANCELLED_AND_RESERVATION_RELEASED',
+            previousState: transfer.status,
+            newState: 'CANCELLED',
+            reason: data.reason.trim(),
+            correlationId: correlationId || null,
+            metadata: {
+              unitsRestoredToAvailable: unitsRestored,
+              unitsFlaggedExpired: unitsExpiredDuringReservation,
+            },
           },
-        },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'CANCEL_REDISTRIBUTION_TRANSFER',
+            details: {
+              transferId: transfer.id,
+              requestId: transfer.requestId,
+              reason: data.reason,
+              unitsRestored,
+              unitsExpiredDuringReservation,
+            },
+          },
+        });
+
+        return updatedTransfer;
       });
 
-      return updatedTransfer;
-    });
+      if (transfer.sourceBloodBankId) {
+        await redisService.del(`inventory:${transfer.sourceBloodBankId}`).catch(() => null);
+      }
 
-    if (transfer.sourceBloodBankId) {
-      await redisService.del(`inventory:${transfer.sourceBloodBankId}`).catch(() => null);
+      return cancelled;
     }
 
-    return cancelled;
-  }
+  /**
+   * Cancels a redistribution request prior to dispatch and releases any reserved inventory (Module F).
+   */
+  async cancelRequest(
+      requestId: string,
+      userId: string,
+      role: string,
+      data: { reason: string },
+      correlationId ?: string
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, false);
+
+      const reqRecord = await prisma.redistributionRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          proposals: true,
+          transfers: {
+            include: {
+              allocations: true,
+            },
+          },
+        },
+      });
+
+      if (!reqRecord) {
+        throw new NotFoundError('Redistribution request not found.');
+      }
+
+      if (!this.isDestinationOwner(inst, reqRecord) && inst.role !== 'ADMIN') {
+        throw new ForbiddenError('Only the requesting destination institution or platform administrator can cancel this request.');
+      }
+
+      if (['DISPATCHED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'CANCELLED'].includes(reqRecord.status)) {
+        throw new BadRequestError(`Cannot cancel request in ${reqRecord.status} state.`);
+      }
+
+      const hasDispatchedTransfer = reqRecord.transfers.some((t) =>
+        ['DISPATCHED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED'].includes(t.status)
+      );
+      if (hasDispatchedTransfer) {
+        throw new BadRequestError('Cannot cancel request because a shipment has already been dispatched.');
+      }
+
+      if (!data.reason || data.reason.trim().length < 3) {
+        throw new BadRequestError('A cancellation reason is required.');
+      }
+
+      const now = new Date();
+
+      const updatedRequest = await prisma.$transaction(async (tx) => {
+        let unitsRestored = 0;
+
+        for (const transfer of reqRecord.transfers) {
+          if (['APPROVED', 'RESERVED', 'READY_FOR_DISPATCH'].includes(transfer.status)) {
+            for (const alloc of transfer.allocations) {
+              if (alloc.status !== 'RESERVED') continue;
+              const isStillUnexpired = new Date(alloc.expiryDate).getTime() > now.getTime();
+              const newInvStatus = isStillUnexpired ? 'AVAILABLE' : 'EXPIRED';
+
+              let mergedIntoOriginal = false;
+              if (isStillUnexpired && alloc.originalInventoryId && alloc.originalInventoryId !== alloc.inventoryId) {
+                const origBatch = await tx.bloodInventory.findFirst({
+                  where: { id: alloc.originalInventoryId, status: 'AVAILABLE' },
+                });
+                if (origBatch) {
+                  await tx.bloodInventory.update({
+                    where: { id: origBatch.id },
+                    data: { unitsCount: { increment: alloc.unitsAllocated } },
+                  });
+                  await tx.bloodInventory.update({
+                    where: { id: alloc.inventoryId },
+                    data: { status: 'EXPIRED', unitsCount: 0 },
+                  });
+                  mergedIntoOriginal = true;
+                }
+              }
+
+              if (!mergedIntoOriginal) {
+                await tx.bloodInventory.update({
+                  where: { id: alloc.inventoryId },
+                  data: { status: newInvStatus },
+                });
+              }
+
+              await tx.redistributionAllocation.update({
+                where: { id: alloc.id },
+                data: { status: 'RELEASED', releasedAt: now },
+              });
+
+              if (isStillUnexpired) {
+                unitsRestored += alloc.unitsAllocated;
+              }
+            }
+
+            await tx.redistributionTransfer.update({
+              where: { id: transfer.id },
+              data: {
+                status: 'CANCELLED',
+                cancelledAt: now,
+                cancellationReason: data.reason.trim(),
+              },
+            });
+          }
+        }
+
+        for (const prop of reqRecord.proposals) {
+          if (prop.status === 'PENDING' || prop.status === 'APPROVED') {
+            await tx.redistributionProposal.update({
+              where: { id: prop.id },
+              data: { status: 'WITHDRAWN', rejectionReason: data.reason.trim() },
+            });
+          }
+        }
+
+        const cancelledReq = await tx.redistributionRequest.update({
+          where: { id: reqRecord.id },
+          data: { status: 'CANCELLED' },
+        });
+
+        await tx.redistributionEvent.create({
+          data: {
+            requestId: reqRecord.id,
+            actorUserId: userId,
+            actorRole: inst.role,
+            actorInstitutionId: inst.facilityId,
+            actorInstitutionName: inst.name,
+            action: 'REQUEST_CANCELLED',
+            previousState: reqRecord.status,
+            newState: 'CANCELLED',
+            reason: data.reason.trim(),
+            correlationId: correlationId || null,
+            metadata: { unitsRestoredToAvailable: unitsRestored },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'CANCEL_REDISTRIBUTION_REQUEST',
+            details: {
+              requestId: reqRecord.id,
+              reason: data.reason.trim(),
+              unitsRestored,
+            },
+          },
+        });
+
+        return cancelledReq;
+      });
+
+      return updatedRequest;
+    }
 
   /**
    * Retrieves a single redistribution request with full proposals, transfers, and audit events.
    */
   async getRequestById(requestId: string, userId: string, role: string) {
-    await this.resolveUserInstitution(userId, role, false);
+      await this.resolveUserInstitution(userId, role, false);
+      const inst = await this.resolveUserInstitution(userId, role, false);
 
-    const record = await prisma.redistributionRequest.findUnique({
-      where: { id: requestId },
-      include: {
-        destinationHospital: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
-        destinationBloodBank: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
-        proposals: {
-          include: {
-            sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
-            sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
-            transfer: {
-              include: {
-                allocations: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-        transfers: {
-          include: {
-            allocations: true,
-            sourceHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-            sourceBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-            destinationHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-            destinationBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-        events: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    if (!record) {
-      throw new NotFoundError('Redistribution request not found.');
-    }
-
-    return record;
-  }
-
-  /**
-   * Lists redistribution dashboard summary, requests, incoming opportunities, and transfers (Module A).
-   */
-  async listRedistributionDashboard(
-    userId: string,
-    role: string,
-    filters?: {
-      bloodGroup?: BloodGroup;
-      componentType?: BloodComponent;
-      urgency?: RedistributionUrgency;
-      status?: RedistributionStatus;
-      search?: string;
-      page?: number;
-      limit?: number;
-    }
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, false);
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 20;
-
-    const reqWhere: any = {};
-    if (filters?.bloodGroup) reqWhere.bloodGroup = filters.bloodGroup;
-    if (filters?.componentType) reqWhere.componentType = filters.componentType;
-    if (filters?.urgency) reqWhere.urgency = filters.urgency;
-    if (filters?.status) reqWhere.status = filters.status;
-
-    const [allRequests, allTransfers, allProposals] = await Promise.all([
-      prisma.redistributionRequest.findMany({
-        where: reqWhere,
+      const record = await prisma.redistributionRequest.findUnique({
+        where: { id: requestId },
         include: {
           destinationHospital: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
           destinationBloodBank: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
@@ -2214,7 +2371,13 @@ export class RedistributionService {
             include: {
               sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
               sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+              transfer: {
+                include: {
+                  allocations: true,
+                },
+              },
             },
+            orderBy: { createdAt: 'desc' },
           },
           transfers: {
             include: {
@@ -2224,355 +2387,454 @@ export class RedistributionService {
               destinationHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
               destinationBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
             },
+            orderBy: { createdAt: 'desc' },
+          },
+          events: {
+            orderBy: { createdAt: 'desc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.redistributionTransfer.findMany({
-        where:
-          inst.role === 'ADMIN'
-            ? {}
-            : inst.hospitalId
-              ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
-              : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] },
-        include: {
-          request: true,
-          allocations: true,
-          sourceHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-          sourceBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-          destinationHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-          destinationBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.redistributionProposal.findMany({
-        where:
-          inst.role === 'ADMIN'
-            ? {}
-            : inst.hospitalId
-              ? { OR: [{ sourceHospitalId: inst.hospitalId }, { request: { destinationHospitalId: inst.hospitalId } }] }
-              : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { request: { destinationBloodBankId: inst.bloodBankId } }] },
-        include: {
-          request: {
-            include: {
-              destinationHospital: { select: { id: true, name: true, city: true } },
-              destinationBloodBank: { select: { id: true, name: true, city: true } },
-            },
-          },
-          sourceHospital: { select: { id: true, name: true, city: true } },
-          sourceBloodBank: { select: { id: true, name: true, city: true } },
-          transfer: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
-
-    // Enrich requests with distance from current institution
-    const enrichedRequests = allRequests
-      .map((r) => {
-        const destName = r.destinationHospital?.name || r.destinationBloodBank?.name || 'Facility';
-        const destCity = r.destinationHospital?.city || r.destinationBloodBank?.city || '';
-        const isOwnRequest = this.isDestinationOwner(inst, r);
-        const distanceKm = mapsService.calculateDistance(
-          inst.latitude,
-          inst.longitude,
-          r.deliveryLatitude,
-          r.deliveryLongitude
-        );
-        const estimatedTransitMins = Math.max(10, Math.round((distanceKm / 40) * 60) + 10);
-
-        return {
-          ...r,
-          destinationName: destName,
-          destinationCity: destCity,
-          isOwnRequest,
-          distanceKm,
-          estimatedTransitMins,
-        };
-      })
-      .filter((r) => {
-        if (!filters?.search) return true;
-        const q = filters.search.toLowerCase();
-        return (
-          r.id.toLowerCase().includes(q) ||
-          r.destinationName.toLowerCase().includes(q) ||
-          r.bloodGroup.toLowerCase().includes(q) ||
-          r.componentType.toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q)
-        );
       });
 
-    // Separate outgoing requests (created by this institution) vs incoming opportunities (created by other institutions)
-    const outgoingRequests =
-      inst.role === 'ADMIN' ? enrichedRequests : enrichedRequests.filter((r) => r.isOwnRequest);
-    const incomingOpportunities =
-      inst.role === 'ADMIN'
-        ? enrichedRequests
-        : enrichedRequests.filter(
-          (r) => !r.isOwnRequest && ['REQUESTED', 'MATCHING', 'PROPOSED', 'AWAITING_APPROVAL'].includes(r.status)
-        );
+      if (!record) {
+        throw new NotFoundError('Redistribution request not found.');
+      }
 
-    // Summary Card Metrics (real backend counts)
-    const activeStatuses = [
-      'REQUESTED',
-      'MATCHING',
-      'PROPOSED',
-      'AWAITING_APPROVAL',
-      'APPROVED',
-      'RESERVED',
-      'READY_FOR_DISPATCH',
-      'DISPATCHED',
-      'IN_TRANSIT',
-    ];
+      const isDest = this.isDestinationOwner(inst, record);
+      const isParticipantSource =
+        record.proposals.some((p) => this.isSourceOwner(inst, p)) ||
+        record.transfers.some((t) => this.isSourceOwner(inst, t));
+      const isOpenForPartnerFulfillment = ['REQUESTED', 'MATCHING', 'PROPOSED', 'AWAITING_APPROVAL'].includes(
+        record.status
+      );
 
-    const summary = {
-      activeRedistributionRequests: outgoingRequests.filter((r) => activeStatuses.includes(r.status)).length,
-      incomingTransferRequests: incomingOpportunities.length,
-      outgoingTransferRequests: outgoingRequests.length,
-      unitsAwaitingDispatch: allTransfers
-        .filter((t) => ['APPROVED', 'RESERVED', 'READY_FOR_DISPATCH'].includes(t.status))
-        .reduce((sum, t) => sum + t.unitsApproved, 0),
-      unitsCurrentlyInTransit: allTransfers
-        .filter((t) => ['DISPATCHED', 'IN_TRANSIT'].includes(t.status))
-        .reduce((sum, t) => sum + (t.unitsDispatched ?? t.unitsApproved), 0),
-      unitsReceivedInPeriod: allTransfers
-        .filter(
-          (t) =>
-            ['RECEIVED', 'COMPLETED'].includes(t.status) &&
-            (inst.role === 'ADMIN' || this.isDestinationOwner(inst, t))
-        )
-        .reduce((sum, t) => sum + (t.unitsReceived ?? 0), 0),
-      urgentAndCriticalRequests: enrichedRequests.filter(
-        (r) => (r.urgency === 'URGENT' || r.urgency === 'CRITICAL') && activeStatuses.includes(r.status)
-      ).length,
-      completedTransfers: allTransfers.filter((t) => t.status === 'COMPLETED').length,
-    };
+      if (inst.role !== 'ADMIN' && !isDest && !isParticipantSource && !isOpenForPartnerFulfillment) {
+        throw new ForbiddenError('You do not have permission to view this redistribution request.');
+      }
 
-    const startIdx = (page - 1) * limit;
-    const paginatedRequests = enrichedRequests.slice(startIdx, startIdx + limit);
+      if (inst.role !== 'ADMIN' && !isDest) {
+        return {
+          ...record,
+          proposals: record.proposals.filter((p) => this.isSourceOwner(inst, p)),
+          transfers: record.transfers.filter((t) => this.isSourceOwner(inst, t)),
+        };
+      }
 
-    return {
-      institution: inst,
-      summary,
-      requests: paginatedRequests,
-      totalRequests: enrichedRequests.length,
-      outgoingRequests,
-      incomingOpportunities,
-      proposals: allProposals,
-      transfers: allTransfers,
-      pagination: {
-        page,
-        limit,
-        total: enrichedRequests.length,
-        totalPages: Math.max(1, Math.ceil(enrichedRequests.length / limit)),
-      },
-    };
-  }
+      return record;
+    }
+
+  /**
+   * Lists redistribution dashboard summary, requests, incoming opportunities, and transfers (Module A).
+   */
+  async listRedistributionDashboard(
+      userId: string,
+      role: string,
+      filters ?: {
+        bloodGroup?: BloodGroup;
+        componentType?: BloodComponent;
+        urgency?: RedistributionUrgency;
+        status?: RedistributionStatus;
+        search?: string;
+        page?: number;
+        limit?: number;
+      }
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, false);
+      const page = filters?.page || 1;
+      const limit = filters?.limit || 20;
+
+      const reqWhere: any = {};
+      if (filters?.bloodGroup) reqWhere.bloodGroup = filters.bloodGroup;
+      if (filters?.componentType) reqWhere.componentType = filters.componentType;
+      if (filters?.urgency) reqWhere.urgency = filters.urgency;
+      if (filters?.status) reqWhere.status = filters.status;
+
+      const [allRequests, allTransfers, allProposals] = await Promise.all([
+        prisma.redistributionRequest.findMany({
+          where: reqWhere,
+          include: {
+            destinationHospital: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
+            destinationBloodBank: { select: { id: true, name: true, city: true, address: true, phone: true, latitude: true, longitude: true } },
+            proposals: {
+              include: {
+                sourceHospital: { select: { id: true, name: true, city: true, phone: true } },
+                sourceBloodBank: { select: { id: true, name: true, city: true, phone: true } },
+              },
+            },
+            transfers: {
+              include: {
+                allocations: true,
+                sourceHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+                sourceBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+                destinationHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+                destinationBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.redistributionTransfer.findMany({
+          where:
+            inst.role === 'ADMIN'
+              ? {}
+              : inst.hospitalId
+                ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
+                : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] },
+          include: {
+            request: true,
+            allocations: true,
+            sourceHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+            sourceBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+            destinationHospital: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+            destinationBloodBank: { select: { id: true, name: true, city: true, phone: true, latitude: true, longitude: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.redistributionProposal.findMany({
+          where:
+            inst.role === 'ADMIN'
+              ? {}
+              : inst.hospitalId
+                ? { OR: [{ sourceHospitalId: inst.hospitalId }, { request: { destinationHospitalId: inst.hospitalId } }] }
+                : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { request: { destinationBloodBankId: inst.bloodBankId } }] },
+          include: {
+            request: {
+              include: {
+                destinationHospital: { select: { id: true, name: true, city: true } },
+                destinationBloodBank: { select: { id: true, name: true, city: true } },
+              },
+            },
+            sourceHospital: { select: { id: true, name: true, city: true } },
+            sourceBloodBank: { select: { id: true, name: true, city: true } },
+            transfer: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      // Enrich requests with distance from current institution
+      // Enrich and scope requests so non-ADMIN institutions only see their own requests, open partner requests, or requests where they participate
+      const enrichedRequests = allRequests
+        .filter((r) => {
+          if (inst.role === 'ADMIN') return true;
+          if (this.isDestinationOwner(inst, r)) return true;
+          if (['REQUESTED', 'MATCHING', 'PROPOSED', 'AWAITING_APPROVAL'].includes(r.status)) return true;
+          const isSourceParticipant =
+            (r.proposals || []).some((p: any) => this.isSourceOwner(inst, p)) ||
+            (r.transfers || []).some((t: any) => this.isSourceOwner(inst, t));
+          return isSourceParticipant;
+        })
+        .map((r) => {
+          const destName = r.destinationHospital?.name || r.destinationBloodBank?.name || 'Facility';
+          const destCity = r.destinationHospital?.city || r.destinationBloodBank?.city || '';
+          const isOwnRequest = this.isDestinationOwner(inst, r);
+          const distanceKm = mapsService.calculateDistance(
+            inst.latitude,
+            inst.longitude,
+            r.deliveryLatitude,
+            r.deliveryLongitude
+          );
+          const estimatedTransitMins = Math.max(10, Math.round((distanceKm / 40) * 60) + 10);
+
+          return {
+            ...r,
+            proposals:
+              inst.role === 'ADMIN' || isOwnRequest
+                ? r.proposals
+                : (r.proposals || []).filter((p: any) => this.isSourceOwner(inst, p)),
+            transfers:
+              inst.role === 'ADMIN' || isOwnRequest
+                ? r.transfers
+                : (r.transfers || []).filter((t: any) => this.isSourceOwner(inst, t)),
+            destinationName: destName,
+            destinationCity: destCity,
+            isOwnRequest,
+            distanceKm,
+            estimatedTransitMins,
+          };
+        })
+        .filter((r) => {
+          if (!filters?.search) return true;
+          const q = filters.search.toLowerCase();
+          return (
+            r.id.toLowerCase().includes(q) ||
+            r.destinationName.toLowerCase().includes(q) ||
+            r.bloodGroup.toLowerCase().includes(q) ||
+            r.componentType.toLowerCase().includes(q) ||
+            r.reason.toLowerCase().includes(q)
+          );
+        });
+
+      // Separate outgoing requests (created by this institution) vs incoming opportunities (created by other institutions)
+      const outgoingRequests =
+        inst.role === 'ADMIN' ? enrichedRequests : enrichedRequests.filter((r) => r.isOwnRequest);
+      const incomingOpportunities =
+        inst.role === 'ADMIN'
+          ? enrichedRequests
+          : enrichedRequests.filter(
+            (r) => !r.isOwnRequest && ['REQUESTED', 'MATCHING', 'PROPOSED', 'AWAITING_APPROVAL'].includes(r.status)
+          );
+
+      // Summary Card Metrics (real backend counts)
+      const activeStatuses = [
+        'REQUESTED',
+        'MATCHING',
+        'PROPOSED',
+        'AWAITING_APPROVAL',
+        'APPROVED',
+        'RESERVED',
+        'READY_FOR_DISPATCH',
+        'DISPATCHED',
+        'IN_TRANSIT',
+      ];
+
+      const summary = {
+        activeRedistributionRequests: outgoingRequests.filter((r) => activeStatuses.includes(r.status)).length,
+        incomingTransferRequests: incomingOpportunities.length,
+        outgoingTransferRequests: outgoingRequests.length,
+        unitsAwaitingDispatch: allTransfers
+          .filter((t) => ['APPROVED', 'RESERVED', 'READY_FOR_DISPATCH'].includes(t.status))
+          .reduce((sum, t) => sum + t.unitsApproved, 0),
+        unitsCurrentlyInTransit: allTransfers
+          .filter((t) => ['DISPATCHED', 'IN_TRANSIT'].includes(t.status))
+          .reduce((sum, t) => sum + (t.unitsDispatched ?? t.unitsApproved), 0),
+        unitsReceivedInPeriod: allTransfers
+          .filter(
+            (t) =>
+              ['RECEIVED', 'COMPLETED'].includes(t.status) &&
+              (inst.role === 'ADMIN' || this.isDestinationOwner(inst, t))
+          )
+          .reduce((sum, t) => sum + (t.unitsReceived ?? 0), 0),
+        urgentAndCriticalRequests: enrichedRequests.filter(
+          (r) => (r.urgency === 'URGENT' || r.urgency === 'CRITICAL') && activeStatuses.includes(r.status)
+        ).length,
+        completedTransfers: allTransfers.filter((t) => t.status === 'COMPLETED').length,
+      };
+
+      const startIdx = (page - 1) * limit;
+      const paginatedRequests = enrichedRequests.slice(startIdx, startIdx + limit);
+
+      return {
+        institution: inst,
+        summary,
+        requests: paginatedRequests,
+        totalRequests: enrichedRequests.length,
+        outgoingRequests,
+        incomingOpportunities,
+        proposals: allProposals,
+        transfers: allTransfers,
+        pagination: {
+          page,
+          limit,
+          total: enrichedRequests.length,
+          totalPages: Math.max(1, Math.ceil(enrichedRequests.length / limit)),
+        },
+      };
+    }
 
   /**
    * Retrieves transfer history and immutable audit events for the authenticated institution (Module J).
    */
   async getHistory(
-    userId: string,
-    role: string,
-    filters?: {
-      status?: RedistributionStatus;
-      bloodGroup?: BloodGroup;
-      componentType?: BloodComponent;
-      startDate?: string;
-      endDate?: string;
+      userId: string,
+      role: string,
+      filters ?: {
+        status?: RedistributionStatus;
+        bloodGroup?: BloodGroup;
+        componentType?: BloodComponent;
+        startDate?: string;
+        endDate?: string;
+      }
+    ) {
+      const inst = await this.resolveUserInstitution(userId, role, false);
+
+      const where: any =
+        inst.role === 'ADMIN'
+          ? {}
+          : inst.hospitalId
+            ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
+            : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] };
+
+      if (filters?.status) where.status = filters.status;
+      if (filters?.bloodGroup) where.bloodGroup = filters.bloodGroup;
+      if (filters?.componentType) where.componentType = filters.componentType;
+      if (filters?.startDate || filters?.endDate) {
+        where.createdAt = {};
+        if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
+        if (filters.endDate) where.createdAt.lte = new Date(filters.endDate);
+      }
+
+      const [transfers, events] = await Promise.all([
+        prisma.redistributionTransfer.findMany({
+          where,
+          include: {
+            request: true,
+            allocations: true,
+            sourceHospital: { select: { id: true, name: true, city: true } },
+            sourceBloodBank: { select: { id: true, name: true, city: true } },
+            destinationHospital: { select: { id: true, name: true, city: true } },
+            destinationBloodBank: { select: { id: true, name: true, city: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.redistributionEvent.findMany({
+          where:
+            inst.role === 'ADMIN'
+              ? {}
+              : {
+                OR: [
+                  { actorInstitutionId: inst.facilityId },
+                  {
+                    request: inst.hospitalId
+                      ? { destinationHospitalId: inst.hospitalId }
+                      : { destinationBloodBankId: inst.bloodBankId },
+                  },
+                ],
+              },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        }),
+      ]);
+
+      return {
+        institution: inst,
+        transfers,
+        auditEvents: events,
+      };
     }
-  ) {
-    const inst = await this.resolveUserInstitution(userId, role, false);
-
-    const where: any =
-      inst.role === 'ADMIN'
-        ? {}
-        : inst.hospitalId
-          ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
-          : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] };
-
-    if (filters?.status) where.status = filters.status;
-    if (filters?.bloodGroup) where.bloodGroup = filters.bloodGroup;
-    if (filters?.componentType) where.componentType = filters.componentType;
-    if (filters?.startDate || filters?.endDate) {
-      where.createdAt = {};
-      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
-      if (filters.endDate) where.createdAt.lte = new Date(filters.endDate);
-    }
-
-    const [transfers, events] = await Promise.all([
-      prisma.redistributionTransfer.findMany({
-        where,
-        include: {
-          request: true,
-          allocations: true,
-          sourceHospital: { select: { id: true, name: true, city: true } },
-          sourceBloodBank: { select: { id: true, name: true, city: true } },
-          destinationHospital: { select: { id: true, name: true, city: true } },
-          destinationBloodBank: { select: { id: true, name: true, city: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.redistributionEvent.findMany({
-        where:
-          inst.role === 'ADMIN'
-            ? {}
-            : {
-              OR: [
-                { actorInstitutionId: inst.facilityId },
-                {
-                  request: inst.hospitalId
-                    ? { destinationHospitalId: inst.hospitalId }
-                    : { destinationBloodBankId: inst.bloodBankId },
-                },
-              ],
-            },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      }),
-    ]);
-
-    return {
-      institution: inst,
-      transfers,
-      auditEvents: events,
-    };
-  }
 
   /**
    * Computes real database analytics & reporting metrics for the authenticated institution (Module J).
    */
   async getAnalytics(userId: string, role: string) {
-    const inst = await this.resolveUserInstitution(userId, role, false);
+      const inst = await this.resolveUserInstitution(userId, role, false);
 
-    const transferWhere: any =
-      inst.role === 'ADMIN'
-        ? {}
-        : inst.hospitalId
-          ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
-          : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] };
+      const transferWhere: any =
+        inst.role === 'ADMIN'
+          ? {}
+          : inst.hospitalId
+            ? { OR: [{ sourceHospitalId: inst.hospitalId }, { destinationHospitalId: inst.hospitalId }] }
+            : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { destinationBloodBankId: inst.bloodBankId }] };
 
-    const [transfers, proposals] = await Promise.all([
-      prisma.redistributionTransfer.findMany({
-        where: transferWhere,
-        include: {
-          request: true,
-          proposal: true,
-        },
-      }),
-      prisma.redistributionProposal.findMany({
-        where:
-          inst.role === 'ADMIN'
-            ? {}
-            : inst.hospitalId
-              ? { OR: [{ sourceHospitalId: inst.hospitalId }, { request: { destinationHospitalId: inst.hospitalId } }] }
-              : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { request: { destinationBloodBankId: inst.bloodBankId } }] },
-      }),
-    ]);
+      const [transfers, proposals] = await Promise.all([
+        prisma.redistributionTransfer.findMany({
+          where: transferWhere,
+          include: {
+            request: true,
+            proposal: true,
+          },
+        }),
+        prisma.redistributionProposal.findMany({
+          where:
+            inst.role === 'ADMIN'
+              ? {}
+              : inst.hospitalId
+                ? { OR: [{ sourceHospitalId: inst.hospitalId }, { request: { destinationHospitalId: inst.hospitalId } }] }
+                : { OR: [{ sourceBloodBankId: inst.bloodBankId }, { request: { destinationBloodBankId: inst.bloodBankId } }] },
+        }),
+      ]);
 
-    let totalUnitsReceived = 0;
-    let totalUnitsSupplied = 0;
-    let completedTransfers = 0;
-    let pendingTransfers = 0;
-    let cancelledTransfers = 0;
-    let recordedDiscrepancies = 0;
-    let completedWithinDeadline = 0;
+      let totalUnitsReceived = 0;
+      let totalUnitsSupplied = 0;
+      let completedTransfers = 0;
+      let pendingTransfers = 0;
+      let cancelledTransfers = 0;
+      let recordedDiscrepancies = 0;
+      let completedWithinDeadline = 0;
 
-    const approvalDurationsMins: number[] = [];
-    const transitDurationsMins: number[] = [];
+      const approvalDurationsMins: number[] = [];
+      const transitDurationsMins: number[] = [];
 
-    const byBloodGroup: Record<string, { transfers: number; units: number }> = {};
-    const byComponent: Record<string, { transfers: number; units: number }> = {};
-    const byMonth: Record<string, { completed: number; unitsTransferred: number }> = {};
+      const byBloodGroup: Record<string, { transfers: number; units: number }> = {};
+      const byComponent: Record<string, { transfers: number; units: number }> = {};
+      const byMonth: Record<string, { completed: number; unitsTransferred: number }> = {};
 
-    for (const t of transfers) {
-      const isDest = inst.role === 'ADMIN' || this.isDestinationOwner(inst, t);
-      const isSource = inst.role === 'ADMIN' || this.isSourceOwner(inst, t);
+      for (const t of transfers) {
+        const isDest = inst.role === 'ADMIN' || this.isDestinationOwner(inst, t);
+        const isSource = inst.role === 'ADMIN' || this.isSourceOwner(inst, t);
 
-      if (['RECEIVED', 'COMPLETED'].includes(t.status)) {
-        if (isDest) totalUnitsReceived += t.unitsReceived ?? 0;
-        if (isSource) totalUnitsSupplied += t.unitsDispatched ?? t.unitsApproved;
-      }
-
-      if (t.status === 'COMPLETED') {
-        completedTransfers++;
-        if (t.receivedAt && t.request?.requiredBy && new Date(t.receivedAt) <= new Date(t.request.requiredBy)) {
-          completedWithinDeadline++;
+        if (['RECEIVED', 'COMPLETED'].includes(t.status)) {
+          if (isDest) totalUnitsReceived += t.unitsReceived ?? 0;
+          if (isSource) totalUnitsSupplied += t.unitsDispatched ?? t.unitsApproved;
         }
-      } else if (['APPROVED', 'RESERVED', 'READY_FOR_DISPATCH', 'DISPATCHED', 'IN_TRANSIT', 'RECEIVED'].includes(t.status)) {
-        pendingTransfers++;
-      } else if (t.status === 'CANCELLED') {
-        cancelledTransfers++;
+
+        if (t.status === 'COMPLETED') {
+          completedTransfers++;
+          if (t.receivedAt && t.request?.requiredBy && new Date(t.receivedAt) <= new Date(t.request.requiredBy)) {
+            completedWithinDeadline++;
+          }
+        } else if (['APPROVED', 'RESERVED', 'READY_FOR_DISPATCH', 'DISPATCHED', 'IN_TRANSIT', 'RECEIVED'].includes(t.status)) {
+          pendingTransfers++;
+        } else if (t.status === 'CANCELLED') {
+          cancelledTransfers++;
+        }
+
+        if (t.hasDiscrepancy) {
+          recordedDiscrepancies++;
+        }
+
+        // Request-to-approval duration
+        if (t.request?.createdAt && t.createdAt) {
+          const diffMins = (new Date(t.createdAt).getTime() - new Date(t.request.createdAt).getTime()) / (60 * 1000);
+          if (diffMins >= 0) approvalDurationsMins.push(diffMins);
+        }
+
+        // Dispatch-to-receipt duration
+        if (t.dispatchedAt && t.receivedAt) {
+          const diffMins = (new Date(t.receivedAt).getTime() - new Date(t.dispatchedAt).getTime()) / (60 * 1000);
+          if (diffMins >= 0) transitDurationsMins.push(diffMins);
+        }
+
+        const bgKey = t.bloodGroup;
+        if (!byBloodGroup[bgKey]) byBloodGroup[bgKey] = { transfers: 0, units: 0 };
+        byBloodGroup[bgKey].transfers += 1;
+        byBloodGroup[bgKey].units += t.unitsReceived ?? t.unitsDispatched ?? t.unitsApproved;
+
+        const compKey = t.componentType;
+        if (!byComponent[compKey]) byComponent[compKey] = { transfers: 0, units: 0 };
+        byComponent[compKey].transfers += 1;
+        byComponent[compKey].units += t.unitsReceived ?? t.unitsDispatched ?? t.unitsApproved;
+
+        const monthKey = new Date(t.createdAt).toISOString().slice(0, 7); // YYYY-MM
+        if (!byMonth[monthKey]) byMonth[monthKey] = { completed: 0, unitsTransferred: 0 };
+        if (t.status === 'COMPLETED') {
+          byMonth[monthKey].completed += 1;
+          byMonth[monthKey].unitsTransferred += t.unitsReceived ?? t.unitsApproved;
+        }
       }
 
-      if (t.hasDiscrepancy) {
-        recordedDiscrepancies++;
-      }
+      const rejectedRequests = proposals.filter((p) => p.status === 'REJECTED').length;
 
-      // Request-to-approval duration
-      if (t.request?.createdAt && t.createdAt) {
-        const diffMins = (new Date(t.createdAt).getTime() - new Date(t.request.createdAt).getTime()) / (60 * 1000);
-        if (diffMins >= 0) approvalDurationsMins.push(diffMins);
-      }
+      const avgRequestToApprovalMins =
+        approvalDurationsMins.length > 0
+          ? parseFloat((approvalDurationsMins.reduce((a, b) => a + b, 0) / approvalDurationsMins.length).toFixed(1))
+          : null;
 
-      // Dispatch-to-receipt duration
-      if (t.dispatchedAt && t.receivedAt) {
-        const diffMins = (new Date(t.receivedAt).getTime() - new Date(t.dispatchedAt).getTime()) / (60 * 1000);
-        if (diffMins >= 0) transitDurationsMins.push(diffMins);
-      }
+      const avgDispatchToReceiptMins =
+        transitDurationsMins.length > 0
+          ? parseFloat((transitDurationsMins.reduce((a, b) => a + b, 0) / transitDurationsMins.length).toFixed(1))
+          : null;
 
-      const bgKey = t.bloodGroup;
-      if (!byBloodGroup[bgKey]) byBloodGroup[bgKey] = { transfers: 0, units: 0 };
-      byBloodGroup[bgKey].transfers += 1;
-      byBloodGroup[bgKey].units += t.unitsReceived ?? t.unitsDispatched ?? t.unitsApproved;
-
-      const compKey = t.componentType;
-      if (!byComponent[compKey]) byComponent[compKey] = { transfers: 0, units: 0 };
-      byComponent[compKey].transfers += 1;
-      byComponent[compKey].units += t.unitsReceived ?? t.unitsDispatched ?? t.unitsApproved;
-
-      const monthKey = new Date(t.createdAt).toISOString().slice(0, 7); // YYYY-MM
-      if (!byMonth[monthKey]) byMonth[monthKey] = { completed: 0, unitsTransferred: 0 };
-      if (t.status === 'COMPLETED') {
-        byMonth[monthKey].completed += 1;
-        byMonth[monthKey].unitsTransferred += t.unitsReceived ?? t.unitsApproved;
-      }
+      return {
+        institution: inst,
+        metrics: {
+          totalUnitsReceived,
+          totalUnitsSupplied,
+          completedTransfers,
+          pendingTransfers,
+          rejectedRequests,
+          cancelledTransfers,
+          recordedDiscrepancies,
+          completedWithinDeadline,
+          deadlineComplianceRate:
+            completedTransfers > 0 ? parseFloat(((completedWithinDeadline / completedTransfers) * 100).toFixed(1)) : null,
+          avgRequestToApprovalMins,
+          avgDispatchToReceiptMins,
+        },
+        byBloodGroup,
+        byComponent,
+        byMonth,
+      };
     }
-
-    const rejectedRequests = proposals.filter((p) => p.status === 'REJECTED').length;
-
-    const avgRequestToApprovalMins =
-      approvalDurationsMins.length > 0
-        ? parseFloat((approvalDurationsMins.reduce((a, b) => a + b, 0) / approvalDurationsMins.length).toFixed(1))
-        : null;
-
-    const avgDispatchToReceiptMins =
-      transitDurationsMins.length > 0
-        ? parseFloat((transitDurationsMins.reduce((a, b) => a + b, 0) / transitDurationsMins.length).toFixed(1))
-        : null;
-
-    return {
-      institution: inst,
-      metrics: {
-        totalUnitsReceived,
-        totalUnitsSupplied,
-        completedTransfers,
-        pendingTransfers,
-        rejectedRequests,
-        cancelledTransfers,
-        recordedDiscrepancies,
-        completedWithinDeadline,
-        deadlineComplianceRate:
-          completedTransfers > 0 ? parseFloat(((completedWithinDeadline / completedTransfers) * 100).toFixed(1)) : null,
-        avgRequestToApprovalMins,
-        avgDispatchToReceiptMins,
-      },
-      byBloodGroup,
-      byComponent,
-      byMonth,
-    };
   }
-}
 
-export const redistributionService = new RedistributionService();
+  export const redistributionService = new RedistributionService();
