@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
@@ -16,6 +16,7 @@ export const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const {
     register,
@@ -24,6 +25,19 @@ export const Login: React.FC = () => {
   } = useForm<LoginFormInputs>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    let timer: any;
+    if (isSubmitting) {
+      setElapsedSeconds(0);
+      timer = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => clearInterval(timer);
+  }, [isSubmitting]);
 
   const onSubmit = async (data: LoginFormInputs) => {
     setIsSubmitting(true);
@@ -34,12 +48,16 @@ export const Login: React.FC = () => {
       const role = response.data.user.role;
       navigate(ROLE_DASHBOARDS[role] || '/', { replace: true });
     } catch (err: any) {
-      const errMsg =
-        err.response?.data?.error?.message ||
-        (err.message === 'Network Error'
-          ? 'Unable to reach API server. Please check connection or verify backend is online.'
-          : err.message) ||
-        'Login failed. Invalid email or password.';
+      let errMsg = err.response?.data?.error?.message;
+      if (!errMsg) {
+        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+          errMsg = 'Connection timed out. The cloud server took too long to respond. Please try again.';
+        } else if (err.message === 'Network Error') {
+          errMsg = 'Unable to reach API server. Please check connection or verify backend is online.';
+        } else {
+          errMsg = err.message || 'Login failed. Invalid email or password.';
+        }
+      }
       toast.error(errMsg);
     } finally {
       setIsSubmitting(false);
@@ -100,8 +118,25 @@ export const Login: React.FC = () => {
           disabled={isSubmitting}
           className="w-full h-11 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-lg shadow-rose-600/20 flex items-center justify-center disabled:opacity-50"
         >
-          {isSubmitting ? <Loader size="sm" color="text-white" /> : 'Sign In'}
+          {isSubmitting ? (
+            <div className="flex items-center gap-2">
+              <Loader size="sm" color="text-white" />
+              <span>
+                {elapsedSeconds >= 4
+                  ? `Waking up server... (${elapsedSeconds}s)`
+                  : 'Signing In...'}
+              </span>
+            </div>
+          ) : (
+            'Sign In'
+          )}
         </button>
+
+        {isSubmitting && elapsedSeconds >= 4 && (
+          <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-950/20 text-[11px] text-amber-200 text-center animate-pulse">
+            Connecting to server... Free-tier instances take ~30–45s to wake up from sleep. Thank you for your patience!
+          </div>
+        )}
 
         {/* Registration Link */}
         <div className="text-center pt-2">

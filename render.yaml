@@ -19,7 +19,7 @@ services:
     rootDir: backend
     buildCommand: npm install --include=dev && npx prisma generate && npx prisma db push --skip-generate && node prisma/seed-prod.js && npm run build
     startCommand: npm start
-    healthCheckPath: /health
+    healthCheckPath: /health/live
     autoDeploy: true
     envVars:
       - key: NODE_ENV
