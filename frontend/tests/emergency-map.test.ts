@@ -1,7 +1,4 @@
-import React from 'react';
-
 // Setup React mock for node environment testing
-let capturedSetState: Record<string, any> = {};
 jest.mock('react', () => {
   const originalReact = jest.requireActual('react');
   return {
