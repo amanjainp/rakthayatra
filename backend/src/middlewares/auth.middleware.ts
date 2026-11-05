@@ -1,11 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, TokenPayload } from '../utils/crypto';
+import prisma from '../config/database';
 
 export interface AuthenticatedRequest extends Request {
   user?: TokenPayload;
 }
 
-export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+// Map demo roles to their corresponding seeded demo accounts
+const DEMO_EMAILS: Record<string, string> = {
+  DONOR: 'aman.jain@donor.org',
+  HOSPITAL: 'apollo@lifelink.org',
+  BLOOD_BANK: 'citybank@lifelink.org',
+  ADMIN: 'admin@lifelink.org',
+};
+
+export async function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
@@ -18,6 +27,30 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
   }
 
   const token = authHeader.split(' ')[1];
+
+  // Fast-path demo token recognition for instant demo dashboard access
+  if (token && token.startsWith('demo-token-')) {
+    const rawRole = token.replace('demo-token-', '').toUpperCase();
+    const role = rawRole === 'BLOODBANK' ? 'BLOOD_BANK' : rawRole;
+    let resolvedUserId = `demo-${role.toLowerCase()}-user`;
+
+    const demoEmail = DEMO_EMAILS[role];
+    if (demoEmail) {
+      try {
+        const dbUser = await prisma.user.findUnique({ where: { email: demoEmail } });
+        if (dbUser) {
+          resolvedUserId = dbUser.id;
+        }
+      } catch {
+        // Fallback to static demo id if database connection is pending
+      }
+    }
+
+    req.user = { userId: resolvedUserId, role };
+    (req.user as any).id = resolvedUserId;
+    return next();
+  }
+
   const payload = verifyAccessToken(token);
 
   if (!payload) {
@@ -39,6 +72,13 @@ export function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, 
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
+    if (token && token.startsWith('demo-token-')) {
+      const rawRole = token.replace('demo-token-', '').toUpperCase();
+      const role = rawRole === 'BLOODBANK' ? 'BLOOD_BANK' : rawRole;
+      req.user = { userId: `demo-${role.toLowerCase()}-user`, role };
+      (req.user as any).id = req.user.userId;
+      return next();
+    }
     const payload = verifyAccessToken(token);
     if (payload) {
       req.user = payload;

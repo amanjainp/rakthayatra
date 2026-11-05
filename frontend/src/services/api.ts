@@ -47,6 +47,12 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
+      const currentToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (currentToken && currentToken.startsWith('demo-token-')) {
+        // Do not force logout for demo users while backend is cold-starting
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
