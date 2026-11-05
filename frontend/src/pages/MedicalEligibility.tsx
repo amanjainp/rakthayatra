@@ -30,6 +30,7 @@ export const MedicalEligibility: React.FC = () => {
         recentSurgery: values.recentSurgery,
         isPregnantOrLactating: values.isPregnantOrLactating,
         consentDpdp: values.consentDpdp,
+        donorProfileId: (user as any)?.donorProfile?.id,
       });
     } catch {
       // handled

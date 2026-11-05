@@ -135,8 +135,9 @@ export class MedicalEligibilityService {
       });
 
       // 5. Write audit log history tracking (omits plaintext answers for compliance)
+      const isUserUuid = !!userId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(userId);
       await auditLogRepo.create({
-        user: userId ? { connect: { id: userId } } : undefined,
+        user: isUserUuid ? { connect: { id: userId } } : undefined,
         action: 'SUBMIT_MEDICAL_QUESTIONNAIRE',
         details: {
           donorProfileId,
@@ -173,7 +174,7 @@ export class MedicalEligibilityService {
   async getDonorEligibility(donorProfileId: string): Promise<MedicalEligibility | null> {
     const eligibilityRepo = new MedicalEligibilityRepository(prisma);
     const record = await eligibilityRepo.findByDonorId(donorProfileId);
-    
+
     if (record && record.answers) {
       try {
         const decryptedStr = decryptData(record.answers);
@@ -243,7 +244,7 @@ export class MedicalEligibilityService {
 
             await prisma.medicalEligibility.update({
               where: { id: record.id },
-              data: { 
+              data: {
                 answers: newPayload as any,
                 migrationStatus: 'SUCCESS',
                 migrationError: null,
@@ -254,7 +255,7 @@ export class MedicalEligibilityService {
           } catch (err: any) {
             failedCount++;
             logger.error(`Failed to re-encrypt record ${record.id}: ${err.message}`);
-            
+
             await prisma.medicalEligibility.update({
               where: { id: record.id },
               data: {

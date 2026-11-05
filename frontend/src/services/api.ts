@@ -4,7 +4,7 @@ import { API_BASE_URL, ACCESS_TOKEN_KEY, USER_KEY } from '../constants';
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  timeout: 12000, // 12-second network timeout to prevent hanging UI requests
+  timeout: 30000, // 30-second network timeout for resilient cloud and database operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -74,20 +74,20 @@ apiClient.interceptors.response.use(
         const response = await apiClient.post('/auth/refresh');
         const { accessToken } = response.data.data;
         localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-        
+
         apiClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
         processQueue(null, accessToken);
-        
+
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        
+
         // Clean session and notify context
         localStorage.removeItem(ACCESS_TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
         window.dispatchEvent(new Event('auth_logout'));
-        
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

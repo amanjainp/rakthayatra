@@ -129,7 +129,7 @@ export class InventoryService {
 
           // Create new reserved record batch
           reservedRecord = await inventoryRepo.create({
-            bloodBank: inventory.bloodBankId ? { connect: { id: inventory.bloodBankId } } : undefined,
+            bloodBank: { connect: { id: inventory.bloodBankId } },
             bloodGroup: inventory.bloodGroup,
             unitsCount: data.unitsToReserve,
             expiryDate: inventory.expiryDate,
@@ -260,7 +260,7 @@ export class InventoryService {
 
     return expiredList;
   }
-  
+
   /**
    * Automatically releases reservations that have been in RESERVED status for longer than 24 hours.
    */

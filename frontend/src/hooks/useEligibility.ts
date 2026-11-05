@@ -37,8 +37,10 @@ export const useEligibility = (donorId?: string) => {
       recentSurgery: boolean;
       isPregnantOrLactating: boolean;
       consentDpdp: boolean;
+      donorProfileId?: string;
     }) => {
       const payload = {
+        donorProfileId: data.donorProfileId,
         weight: data.weight,
         hasInfections: data.hadInfections,
         recentTattooOrPiercing: data.recentTattooOrPiercing,
