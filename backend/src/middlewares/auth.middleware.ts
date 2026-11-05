@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, TokenPayload } from '../utils/crypto';
-import prisma from '../config/database';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export interface AuthenticatedRequest extends Request {
   user?: TokenPayload;

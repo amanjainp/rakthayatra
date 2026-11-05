@@ -129,7 +129,7 @@ export class InventoryService {
 
           // Create new reserved record batch
           reservedRecord = await inventoryRepo.create({
-            bloodBank: { connect: { id: inventory.bloodBankId } },
+            bloodBank: inventory.bloodBankId ? { connect: { id: inventory.bloodBankId } } : undefined,
             bloodGroup: inventory.bloodGroup,
             unitsCount: data.unitsToReserve,
             expiryDate: inventory.expiryDate,
@@ -249,7 +249,7 @@ export class InventoryService {
     });
 
     // Invalidate caches for modified blood banks
-    const bankIds = Array.from(new Set(expiredList.map((e) => e.bloodBankId)));
+    const bankIds = Array.from(new Set(expiredList.map((e) => e.bloodBankId).filter(Boolean) as string[]));
     for (const bankId of bankIds) {
       await this.invalidateCache(bankId);
     }
@@ -306,7 +306,7 @@ export class InventoryService {
     });
 
     // Invalidate caches
-    const bankIds = Array.from(new Set(releasedList.map((e) => e.bloodBankId)));
+    const bankIds = Array.from(new Set(releasedList.map((e) => e.bloodBankId).filter(Boolean) as string[]));
     for (const bankId of bankIds) {
       await this.invalidateCache(bankId);
     }
@@ -452,6 +452,7 @@ export class InventoryService {
 
     const bloodBanksMap = new Map<string, any>();
     for (const item of availableItems) {
+      if (!item.bloodBank) continue;
       const bankId = item.bloodBank.id;
       if (!bloodBanksMap.has(bankId)) {
         bloodBanksMap.set(bankId, {
@@ -487,7 +488,8 @@ export class InventoryService {
   /**
    * Helper to invalidate caches.
    */
-  private async invalidateCache(bloodBankId: string) {
+  private async invalidateCache(bloodBankId?: string | null) {
+    if (!bloodBankId) return;
     try {
       await redisService.del(`inventory:${bloodBankId}`);
       logger.debug(`Invalidated cache key inventory:${bloodBankId}`);
