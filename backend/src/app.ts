@@ -14,16 +14,12 @@ import facilityRoutes from './routes/facility.routes';
 import chatbotRoutes from './routes/chatbot.routes';
 import appointmentRoutes from './routes/appointment.routes';
 import notificationRoutes from './routes/notification.routes';
-import redistributionRoutes from './routes/redistribution.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRoutes from './routes/metrics.routes';
 import { loggingMiddleware } from './middlewares/logging.middleware';
 import { renderApiLandingPage } from './views/landing-page';
 
 const app = express();
-
-// Trust reverse proxies (e.g. Render, Nginx) so req.ip and rate limiters receive the real client IP
-app.set('trust proxy', 1);
 
 // Apply Logging context middleware first to set request/correlation IDs
 app.use(loggingMiddleware);
@@ -83,7 +79,6 @@ app.use('/api/facilities', facilityRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/redistribution', redistributionRoutes);
 
 // Root API Welcome / Status probe
 const rootStatusHandler = (req: Request, res: Response) => {
@@ -109,7 +104,6 @@ const rootStatusHandler = (req: Request, res: Response) => {
       requests: '/api/requests',
       eligibility: '/api/eligibility',
       camps: '/api/camps',
-      redistribution: '/api/redistribution',
     },
   });
 };

@@ -21,7 +21,6 @@ const BloodBankDashboard = lazy(() => import('./pages/bloodbank/BloodBankDashboa
 const Profile = lazy(() => import('./pages/Profile'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const BloodRequests = lazy(() => import('./pages/BloodRequests'));
-const Redistribution = lazy(() => import('./pages/Redistribution'));
 const Donations = lazy(() => import('./pages/Donations'));
 const MedicalEligibility = lazy(() => import('./pages/MedicalEligibility'));
 const DonationCamps = lazy(() => import('./pages/DonationCamps'));
@@ -89,22 +88,6 @@ function App() {
                 />
 
                 {/* Business Modules (Role Restricted) */}
-                <Route
-                  path="/hospital/redistribution"
-                  element={
-                    <RoleProtectedRoute allowedRoles={['HOSPITAL', 'BLOOD_BANK', 'ADMIN']}>
-                      <Redistribution />
-                    </RoleProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/redistribution"
-                  element={
-                    <RoleProtectedRoute allowedRoles={['HOSPITAL', 'BLOOD_BANK', 'ADMIN']}>
-                      <Redistribution />
-                    </RoleProtectedRoute>
-                  }
-                />
                 <Route
                   path="/inventory"
                   element={

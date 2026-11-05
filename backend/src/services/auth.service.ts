@@ -70,14 +70,13 @@ export class AuthService {
           },
         });
       } else if (role.name === 'HOSPITAL') {
-        const facilityName = details.name || details.facilityName;
-        if (!facilityName || !details.licenseNumber || !details.phone) {
+        if (!details.name || !details.licenseNumber || !details.phone) {
           throw new Error('Missing required hospital profile fields.');
         }
         await tx.hospitalProfile.create({
           data: {
             userId: user.id,
-            name: facilityName,
+            name: details.name,
             licenseNumber: details.licenseNumber,
             phone: details.phone,
             address: details.address || 'Unknown',
@@ -87,14 +86,13 @@ export class AuthService {
           },
         });
       } else if (role.name === 'BLOOD_BANK') {
-        const facilityName = details.name || details.facilityName;
-        if (!facilityName || !details.licenseNumber || !details.phone) {
+        if (!details.name || !details.licenseNumber || !details.phone) {
           throw new Error('Missing required blood bank profile fields.');
         }
         await tx.bloodBankProfile.create({
           data: {
             userId: user.id,
-            name: facilityName,
+            name: details.name,
             licenseNumber: details.licenseNumber,
             phone: details.phone,
             address: details.address || 'Unknown',

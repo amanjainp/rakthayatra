@@ -6,27 +6,10 @@ import logger from '../config/logger';
 
 const router = Router();
 
-const isDev = process.env.NODE_ENV !== 'production';
-
-const isLocalOrDev = (req: any) => {
-  if (isDev) return true;
-  const ip = req.ip || req.connection?.remoteAddress || '';
-  return (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip.startsWith('127.') ||
-    ip === 'localhost'
-  );
-};
-
 // Endpoint-specific Rate Limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
-  max: isDev ? 1000 : 30, // Limit 30 logins per window per IP in production
-  skip: (req) => isLocalOrDev(req),
-  standardHeaders: true,
-  legacyHeaders: false,
+  max: 5, // Limit 5 logins per window per IP
   message: {
     success: false,
     error: {
@@ -37,11 +20,8 @@ const loginLimiter = rateLimit({
 });
 
 const registerLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
-  max: isDev ? 1000 : 50, // Limit 50 registrations per window per IP in production
-  skip: (req) => isLocalOrDev(req),
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit 3 accounts per hour per IP
   message: {
     success: false,
     error: {
@@ -53,10 +33,7 @@ const registerLimiter = rateLimit({
 
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 30,
-  skip: (req) => isLocalOrDev(req),
-  standardHeaders: true,
-  legacyHeaders: false,
+  max: 10,
   message: {
     success: false,
     error: {
@@ -68,10 +45,7 @@ const otpLimiter = rateLimit({
 
 const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 30,
-  skip: (req) => isLocalOrDev(req),
-  standardHeaders: true,
-  legacyHeaders: false,
+  max: 5,
   message: {
     success: false,
     error: {

@@ -3,7 +3,6 @@ import { API_BASE_URL, ACCESS_TOKEN_KEY, USER_KEY } from '../constants';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60s timeout to allow Render free tier container spin-up without infinite hang
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',

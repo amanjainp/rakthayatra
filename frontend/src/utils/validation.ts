@@ -39,7 +39,7 @@ export const registerSchema = z
     role: z.enum(['ADMIN', 'DONOR', 'HOSPITAL', 'BLOOD_BANK']),
     fullName: z.string().min(2, 'Full Name must be at least 2 characters long.'),
     phone: z.string().min(10, 'Phone number must be at least 10 digits long.'),
-
+    
     // Donor Details
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'Not Specified']).optional(),
     dob: z.string().optional(),
@@ -76,68 +76,5 @@ export const registerSchema = z
     {
       message: 'License number and name are required for hospitals and blood banks.',
       path: ['licenseNumber'],
-    }
-  );
-
-// Hospital-to-Hospital Blood Redistribution Validation Schemas
-export const bloodGroupEnumSchema = z.enum([
-  'A_POS',
-  'A_NEG',
-  'B_POS',
-  'B_NEG',
-  'AB_POS',
-  'AB_NEG',
-  'O_POS',
-  'O_NEG',
-]);
-
-export const bloodComponentEnumSchema = z.enum([
-  'WHOLE_BLOOD',
-  'PACKED_RBC',
-  'PLASMA',
-  'PLATELETS',
-  'CRYOPRECIPITATE',
-]);
-
-export const redistributionUrgencySchema = z.enum(['ROUTINE', 'URGENT', 'CRITICAL']);
-
-export const createRedistributionRequestSchema = z
-  .object({
-    bloodGroup: bloodGroupEnumSchema,
-    componentType: bloodComponentEnumSchema.default('WHOLE_BLOOD'),
-    unitsRequested: z.number().int().min(1, 'At least 1 unit is required').max(100),
-    urgency: redistributionUrgencySchema,
-    requiredBy: z.string().refine((val) => {
-      const dt = new Date(val);
-      return !isNaN(dt.getTime()) && dt.getTime() > Date.now();
-    }, 'Required-by date/time must be in the future'),
-    minRemainingShelfLifeDays: z.number().int().min(1).max(365).default(2),
-    clinicalReason: z.string().min(5, 'Clinical justification must be at least 5 characters'),
-    specialHandlingNotes: z.string().optional(),
-  });
-
-export const dispatchTransferSchema = z.object({
-  coldChainVerified: z.literal(true, {
-    message: 'Cold-chain verification is mandatory before dispatch',
-  }),
-  temperatureCelsius: z.number().min(-80).max(30),
-  transportContainerId: z.string().min(2).optional(),
-  courierName: z.string().min(2).optional(),
-});
-
-export const receiveTransferReconciliationSchema = z
-  .object({
-    unitsReceivedGood: z.number().int().min(0),
-    unitsDamaged: z.number().int().min(0).default(0),
-    unitsExpiredInTransit: z.number().int().min(0).default(0),
-    coldChainIntact: z.boolean(),
-    receivingTempCelsius: z.number().min(-80).max(40).optional(),
-    discrepancyReason: z.string().optional(),
-  })
-  .refine(
-    (data) => data.unitsReceivedGood + data.unitsDamaged + data.unitsExpiredInTransit > 0,
-    {
-      message: 'Total reconciled units must be greater than zero',
-      path: ['unitsReceivedGood'],
     }
   );

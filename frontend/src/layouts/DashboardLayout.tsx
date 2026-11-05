@@ -15,14 +15,13 @@ import {
   MapIcon,
   ShieldExclamationIcon,
   BellIcon,
-  ArrowsRightLeftIcon,
 } from '@heroicons/react/24/outline';
 
 export const DashboardLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
@@ -36,12 +35,7 @@ export const DashboardLayout: React.FC = () => {
   };
 
   // Helper to determine active route styles
-  const isActive = (path: string) => {
-    if (path === '/hospital/redistribution' && location.pathname === '/redistribution') {
-      return true;
-    }
-    return location.pathname === path;
-  };
+  const isActive = (path: string) => location.pathname === path;
 
   // Sidebar Links based on roles
   const getNavLinks = () => {
@@ -52,14 +46,12 @@ export const DashboardLayout: React.FC = () => {
 
     const roleLinks: Record<string, { name: string; path: string; icon: any }[]> = {
       ADMIN: [
-        { name: 'Blood Redistribution', path: '/hospital/redistribution', icon: ArrowsRightLeftIcon },
         { name: 'Inventory Management', path: '/inventory', icon: QueueListIcon },
         { name: 'All Requests', path: '/requests', icon: InboxIcon },
         { name: 'Camps Manager', path: '/camps', icon: MapIcon },
         { name: 'Admin Management', path: '/admin/management', icon: ShieldExclamationIcon },
       ],
       BLOOD_BANK: [
-        { name: 'Blood Redistribution', path: '/hospital/redistribution', icon: ArrowsRightLeftIcon },
         { name: 'Inventory Stock', path: '/inventory', icon: QueueListIcon },
         { name: 'Blood Donations', path: '/donations', icon: ClipboardDocumentCheckIcon },
       ],
@@ -69,7 +61,6 @@ export const DashboardLayout: React.FC = () => {
         { name: 'Camps Near Me', path: '/camps', icon: MapIcon },
       ],
       HOSPITAL: [
-        { name: 'Blood Redistribution', path: '/hospital/redistribution', icon: ArrowsRightLeftIcon },
         { name: 'Blood Requests', path: '/requests', icon: InboxIcon },
       ],
     };
@@ -125,9 +116,10 @@ export const DashboardLayout: React.FC = () => {
               to={link.path}
               onClick={() => setIsSidebarOpen(false)}
               className={`flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group
-                ${isActive(link.path)
-                  ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ${
+                  isActive(link.path)
+                    ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }
               `}
               title={isCollapsed ? link.name : ''}
@@ -148,9 +140,10 @@ export const DashboardLayout: React.FC = () => {
             to="/profile"
             onClick={() => setIsSidebarOpen(false)}
             className={`flex items-center space-x-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group
-              ${isActive('/profile')
-                ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ${
+                isActive('/profile')
+                  ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }
             `}
             title={isCollapsed ? 'Profile' : ''}
@@ -176,7 +169,7 @@ export const DashboardLayout: React.FC = () => {
 
       {/* 3. Main Workspace Container */}
       <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${isCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-
+        
         {/* Top Navbar */}
         <header className="h-16 bg-slate-900/40 backdrop-blur-md border-b border-slate-800/40 sticky top-0 z-30 px-6 flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -231,8 +224,9 @@ export const DashboardLayout: React.FC = () => {
                           markAsRead(notif.id);
                           setIsBellOpen(false);
                         }}
-                        className={`p-4 cursor-pointer hover:bg-slate-800/30 transition-colors text-left space-y-1 ${notif.read ? 'opacity-60' : ''
-                          }`}
+                        className={`p-4 cursor-pointer hover:bg-slate-800/30 transition-colors text-left space-y-1 ${
+                          notif.read ? 'opacity-60' : ''
+                        }`}
                       >
                         <h4 className="text-xs font-bold text-slate-200 leading-snug">{notif.title}</h4>
                         <p className="text-[10px] text-slate-400 leading-normal">{notif.body}</p>
@@ -257,7 +251,7 @@ export const DashboardLayout: React.FC = () => {
               <p className="text-sm font-semibold text-slate-200">{user?.fullName}</p>
               <p className="text-xs text-rose-500 font-bold">{user?.role}</p>
             </div>
-
+            
             {/* User Avatar Circle */}
             <div className="w-10 h-10 bg-slate-800 border border-slate-700/80 rounded-xl flex items-center justify-center text-rose-500 font-bold text-sm select-none shadow-md shadow-slate-950/20">
               {user?.fullName?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}

@@ -24,14 +24,6 @@ enum BloodGroup {
   O_NEG
 }
 
-enum BloodComponent {
-  WHOLE_BLOOD
-  PACKED_RBC
-  PLASMA
-  PLATELETS
-  CRYOPRECIPITATE
-}
-
 enum RequestUrgency {
   NORMAL
   EMERGENCY
@@ -62,7 +54,6 @@ enum NotificationType {
   REQUEST_UPDATE
   DONATION_REMINDER
   LOW_INVENTORY
-  REDISTRIBUTION_ALERT
 }
 
 enum CampStatus {
@@ -70,38 +61,6 @@ enum CampStatus {
   ACTIVE
   COMPLETED
   CANCELLED
-}
-
-enum RedistributionUrgency {
-  ROUTINE
-  URGENT
-  CRITICAL
-}
-
-enum RedistributionStatus {
-  REQUESTED
-  MATCHING
-  PROPOSED
-  AWAITING_APPROVAL
-  APPROVED
-  RESERVED
-  READY_FOR_DISPATCH
-  DISPATCHED
-  IN_TRANSIT
-  RECEIVED
-  COMPLETED
-  REJECTED
-  CANCELLED
-  EXPIRED
-  FAILED
-}
-
-enum ProposalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  WITHDRAWN
-  EXPIRED
 }
 
 model Role {
@@ -129,15 +88,12 @@ model User {
   hospitalProfile  HospitalProfile?
   bloodBankProfile BloodBankProfile?
   
-  refreshTokens           RefreshToken[]
-  auditLogs               AuditLog[]
-  notifications           Notification[]
-  bloodRequests           BloodRequest[]           @relation("UserRequests")
-  deviceTokens            DeviceToken[]
-  userConsent             UserConsent?
-  redistributionRequests  RedistributionRequest[]  @relation("UserRedistributionRequests")
-  redistributionProposals RedistributionProposal[] @relation("UserRedistributionProposals")
-  redistributionEvents    RedistributionEvent[]    @relation("UserRedistributionEvents")
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  bloodRequests    BloodRequest[]    @relation("UserRequests")
+  deviceTokens     DeviceToken[]
+  userConsent      UserConsent?
 
   @@index([email])
 }
@@ -215,12 +171,7 @@ model HospitalProfile {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
-  appointments                   Appointment[]
-  inventory                      BloodInventory[]
-  incomingRedistributionRequests RedistributionRequest[]  @relation("DestHospitalRedistRequests")
-  outgoingProposals              RedistributionProposal[] @relation("SourceHospitalProposals")
-  sourceTransfers                RedistributionTransfer[] @relation("SourceHospitalTransfers")
-  destinationTransfers           RedistributionTransfer[] @relation("DestHospitalTransfers")
+  appointments  Appointment[]
 
   @@index([latitude, longitude])
 }
@@ -241,42 +192,28 @@ model BloodBankProfile {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   
-  inventory                      BloodInventory[]
-  donations                      Donation[]
-  appointments                   Appointment[]
-  targetedRequests               BloodRequest[]           @relation("TargetedBloodBank")
-  allocatedRequests              BloodRequest[]           @relation("AllocatedBloodBank")
-  incomingRedistributionRequests RedistributionRequest[]  @relation("DestBankRedistRequests")
-  outgoingProposals              RedistributionProposal[] @relation("SourceBankProposals")
-  sourceTransfers                RedistributionTransfer[] @relation("SourceBankTransfers")
-  destinationTransfers           RedistributionTransfer[] @relation("DestBankTransfers")
+  inventory            BloodInventory[]
+  donations            Donation[]
+  appointments         Appointment[]
+  targetedRequests     BloodRequest[]   @relation("TargetedBloodBank")
+  allocatedRequests    BloodRequest[]   @relation("AllocatedBloodBank")
 
   @@index([latitude, longitude])
 }
 
 model BloodInventory {
-  id             String                     @id @default(uuid())
-  bloodBankId    String?
-  bloodBank      BloodBankProfile?          @relation(fields: [bloodBankId], references: [id], onDelete: Cascade)
-  hospitalId     String?
-  hospital       HospitalProfile?           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  bloodGroup     BloodGroup
-  componentType  BloodComponent             @default(WHOLE_BLOOD)
-  unitsCount     Int
-  expiryDate     DateTime
-  collectionDate DateTime?
-  batchNumber    String?
-  storageTemp    String?
-  status         InventoryStatus            @default(AVAILABLE)
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
-
-  allocations    RedistributionAllocation[]
+  id          String           @id @default(uuid())
+  bloodBankId String
+  bloodBank   BloodBankProfile @relation(fields: [bloodBankId], references: [id], onDelete: Cascade)
+  bloodGroup  BloodGroup
+  unitsCount  Int
+  expiryDate  DateTime
+  status      InventoryStatus  @default(AVAILABLE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@index([bloodBankId])
-  @@index([hospitalId])
   @@index([bloodGroup, status])
-  @@index([bloodGroup, componentType, status])
 }
 
 model BloodRequest {
@@ -330,20 +267,20 @@ model Donation {
 }
 
 model DonationCamp {
-  id                      String         @id @default(uuid())
-  name                    String
-  organizer               String
-  address                 String
-  city                    String
-  latitude                Float
-  longitude               Float
-  startDate               DateTime
-  endDate                 DateTime
-  status                  CampStatus     @default(UPCOMING)
+  id        String         @id @default(uuid())
+  name      String
+  organizer String
+  address   String
+  city      String
+  latitude  Float
+  longitude Float
+  startDate DateTime
+  endDate   DateTime
+  status    CampStatus     @default(UPCOMING)
   externalRegistrationUrl String?
-  createdAt               DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
-  deletedAt               DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
   
   donors    DonorProfile[]
   donations Donation[]
@@ -439,175 +376,4 @@ model Appointment {
   @@index([hospitalId])
   @@index([bloodBankId])
   @@index([appointmentDate, status])
-}
-
-model RedistributionRequest {
-  id                        String                   @id @default(uuid())
-  requesterUserId           String
-  requester                 User                     @relation("UserRedistributionRequests", fields: [requesterUserId], references: [id], onDelete: Cascade)
-  destinationFacilityType   String                   // "HOSPITAL" or "BLOOD_BANK"
-  destinationHospitalId     String?
-  destinationHospital       HospitalProfile?         @relation("DestHospitalRedistRequests", fields: [destinationHospitalId], references: [id], onDelete: SetNull)
-  destinationBloodBankId    String?
-  destinationBloodBank      BloodBankProfile?        @relation("DestBankRedistRequests", fields: [destinationBloodBankId], references: [id], onDelete: SetNull)
-  bloodGroup                BloodGroup
-  componentType             BloodComponent           @default(WHOLE_BLOOD)
-  unitsRequired             Int
-  urgency                   RedistributionUrgency    @default(ROUTINE)
-  status                    RedistributionStatus     @default(REQUESTED)
-  requiredBy                DateTime
-  minRemainingShelfLifeDays Int                      @default(3)
-  deliveryAddress           String
-  deliveryLatitude          Float
-  deliveryLongitude         Float
-  reason                    String
-  specialHandlingNotes      String?
-  additionalNotes           String?
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-
-  proposals                 RedistributionProposal[]
-  transfers                 RedistributionTransfer[]
-  events                    RedistributionEvent[]
-
-  @@index([status])
-  @@index([bloodGroup, componentType, status])
-  @@index([destinationHospitalId])
-  @@index([destinationBloodBankId])
-  @@index([createdAt])
-}
-
-model RedistributionProposal {
-  id                  String                  @id @default(uuid())
-  requestId           String
-  request             RedistributionRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  proposerUserId      String
-  proposer            User                    @relation("UserRedistributionProposals", fields: [proposerUserId], references: [id], onDelete: Cascade)
-  sourceFacilityType  String                  // "HOSPITAL" or "BLOOD_BANK"
-  sourceHospitalId    String?
-  sourceHospital      HospitalProfile?        @relation("SourceHospitalProposals", fields: [sourceHospitalId], references: [id], onDelete: SetNull)
-  sourceBloodBankId   String?
-  sourceBloodBank     BloodBankProfile?       @relation("SourceBankProposals", fields: [sourceBloodBankId], references: [id], onDelete: SetNull)
-  bloodGroup          BloodGroup
-  componentType       BloodComponent
-  unitsProposed       Int
-  status              ProposalStatus          @default(PENDING)
-  proposedInventoryIds String[]               @default([])
-  estimatedDistanceKm Float?
-  estimatedTransitMins Int?
-  notes               String?
-  rejectionReason     String?
-  reviewedByUserId    String?
-  reviewedAt          DateTime?
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-
-  transfer            RedistributionTransfer?
-
-  @@index([requestId])
-  @@index([sourceHospitalId])
-  @@index([sourceBloodBankId])
-  @@index([status])
-}
-
-model RedistributionTransfer {
-  id                        String                     @id @default(uuid())
-  requestId                 String
-  request                   RedistributionRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  proposalId                String                     @unique
-  proposal                  RedistributionProposal     @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  sourceFacilityType        String                     // "HOSPITAL" or "BLOOD_BANK"
-  sourceHospitalId          String?
-  sourceHospital            HospitalProfile?           @relation("SourceHospitalTransfers", fields: [sourceHospitalId], references: [id], onDelete: SetNull)
-  sourceBloodBankId         String?
-  sourceBloodBank           BloodBankProfile?          @relation("SourceBankTransfers", fields: [sourceBloodBankId], references: [id], onDelete: SetNull)
-  destinationFacilityType   String                     // "HOSPITAL" or "BLOOD_BANK"
-  destinationHospitalId     String?
-  destinationHospital       HospitalProfile?           @relation("DestHospitalTransfers", fields: [destinationHospitalId], references: [id], onDelete: SetNull)
-  destinationBloodBankId    String?
-  destinationBloodBank      BloodBankProfile?          @relation("DestBankTransfers", fields: [destinationBloodBankId], references: [id], onDelete: SetNull)
-  bloodGroup                BloodGroup
-  componentType             BloodComponent
-  unitsApproved             Int
-  unitsDispatched           Int?
-  unitsReceived             Int?
-  status                    RedistributionStatus       @default(RESERVED)
-  shipmentReference         String?                    @unique
-  dispatcherName            String?
-  dispatchedByUserId        String?
-  dispatchedAt              DateTime?
-  transportVehicleDetails   String?
-  temperatureCheckConfirmed Boolean                    @default(false)
-  coldChainNotes            String?
-  expectedArrivalAt         DateTime?
-  inTransitUpdatedAt        DateTime?
-  inTransitNotes            String?
-  receivedByUserId          String?
-  receiverStaffName         String?
-  receivedAt                DateTime?
-  conditionVerified         Boolean                    @default(false)
-  hasDiscrepancy            Boolean                    @default(false)
-  discrepancyReason         String?
-  damagedUnits              Int                        @default(0)
-  completedAt               DateTime?
-  cancelledAt               DateTime?
-  cancellationReason        String?
-  idempotencyKey            String?                    @unique
-  createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime                   @updatedAt
-
-  allocations               RedistributionAllocation[]
-  events                    RedistributionEvent[]
-
-  @@index([requestId])
-  @@index([sourceHospitalId])
-  @@index([sourceBloodBankId])
-  @@index([destinationHospitalId])
-  @@index([destinationBloodBankId])
-  @@index([status])
-}
-
-model RedistributionAllocation {
-  id                  String                 @id @default(uuid())
-  transferId          String
-  transfer            RedistributionTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  inventoryId         String
-  inventory           BloodInventory         @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  originalInventoryId String?
-  bloodGroup          BloodGroup
-  componentType       BloodComponent
-  unitsAllocated      Int
-  expiryDate          DateTime
-  status              String                 @default("RESERVED") // "RESERVED", "DISPATCHED", "RECEIVED", "RELEASED"
-  reservedByUserId    String
-  reservedAt          DateTime               @default(now())
-  releasedAt          DateTime?
-
-  @@index([transferId])
-  @@index([inventoryId])
-}
-
-model RedistributionEvent {
-  id                   String                  @id @default(uuid())
-  requestId            String?
-  request              RedistributionRequest?  @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  transferId           String?
-  transfer             RedistributionTransfer? @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  actorUserId          String?
-  actor                User?                   @relation("UserRedistributionEvents", fields: [actorUserId], references: [id], onDelete: SetNull)
-  actorRole            String?
-  actorInstitutionId   String?
-  actorInstitutionName String?
-  action               String
-  previousState        String?
-  newState             String?
-  reason               String?
-  metadata             Json?
-  correlationId        String?
-  createdAt            DateTime                @default(now())
-
-  @@index([requestId])
-  @@index([transferId])
-  @@index([actorUserId])
-  @@index([createdAt])
 }
