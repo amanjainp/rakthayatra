@@ -4,6 +4,7 @@ import { API_BASE_URL, ACCESS_TOKEN_KEY, USER_KEY } from '../constants';
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  timeout: 12000, // 12-second network timeout to prevent hanging UI requests
   headers: {
     'Content-Type': 'application/json',
   },

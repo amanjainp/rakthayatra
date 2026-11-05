@@ -96,15 +96,30 @@ export class MapsService {
 
     if (this.isMockMode) {
       logger.info(`[MOCK] Reverse geocoding coords: ${latitude},${longitude}`);
+
+      // Fast-resolve known geographical landmarks for seamless local development
+      if (Math.abs(latitude - 28.6139) < 0.2 && Math.abs(longitude - 77.209) < 0.2) {
+        return 'Connaught Place, New Delhi';
+      }
+      if (Math.abs(latitude - 12.9716) < 0.2 && Math.abs(longitude - 77.5946) < 0.2) {
+        return 'MG Road / Central Bengaluru, Karnataka';
+      }
+      if (Math.abs(latitude - 12.5292) < 0.15 && Math.abs(longitude - 76.8953) < 0.15) {
+        return 'Tamilians Colony, Mandya, Karnataka';
+      }
+      if (Math.abs(latitude - 12.3160) < 0.15 && Math.abs(longitude - 76.6520) < 0.15) {
+        return 'New Sayyaji Rao Road, Mysuru, Karnataka';
+      }
       
       const mockAddress = await new Promise<string>((resolve) => {
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
         const options = {
           headers: {
-            'User-Agent': 'Rakthayatra-Platform'
-          }
+            'User-Agent': 'Rakthayatra-Platform (support@lifelink.org)'
+          },
+          timeout: 2500 // Strict 2.5s network timeout to prevent hanging
         };
-        https.get(url, options, (res: any) => {
+        const req = https.get(url, options, (res: any) => {
           let data = '';
           res.on('data', (chunk: any) => { data += chunk; });
           res.on('end', () => {
@@ -119,7 +134,14 @@ export class MapsService {
               resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
             }
           });
-        }).on('error', () => {
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+        });
+
+        req.on('error', () => {
           resolve(`Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
         });
       });

@@ -30,10 +30,17 @@ jest.mock('react-hot-toast', () => ({
   },
 }));
 
-// Mock useMapsLocations hook
+// Mock useMapsLocations and useMapsConfig hooks
 jest.mock('../src/hooks/useMapsLocations', () => ({
   useMapsLocations: jest.fn().mockReturnValue({
     data: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
+  useMapsConfig: jest.fn().mockReturnValue({
+    data: { googleMapsApiKey: '', isMockMode: true },
     isLoading: false,
   }),
 }));
