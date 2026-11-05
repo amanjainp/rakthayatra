@@ -141,12 +141,15 @@ export const Login: React.FC = () => {
       const response = await login(data.email, data.password);
       toast.success('Successfully logged in!');
       
-      const role = response.data.user.role;
-      navigate(ROLE_DASHBOARDS[role] || '/', { replace: true });
+      const role = response?.data?.user?.role || (response as any)?.user?.role;
+      const targetRoute = (role && ROLE_DASHBOARDS[role as Role]) || '/';
+      navigate(targetRoute, { replace: true });
     } catch (err: any) {
       const errMsg =
         err.response?.data?.error?.message ||
-        (err.message === 'Network Error'
+        (err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+          ? 'Login request timed out. Please retry.'
+          : err.message === 'Network Error'
           ? 'Unable to reach API server. Please check connection or verify backend is online.'
           : err.message) ||
         'Login failed. Invalid email or password.';

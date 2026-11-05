@@ -42,8 +42,13 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Avoid infinite loop if refreshing fails
-    if (originalRequest.url?.includes('/auth/refresh') || originalRequest._retry) {
+    // Avoid infinite loop if refreshing fails, and do not attempt token refresh on login/register endpoints
+    if (
+      originalRequest.url?.includes('/auth/refresh') ||
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/register') ||
+      originalRequest._retry
+    ) {
       return Promise.reject(error);
     }
 
