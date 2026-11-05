@@ -32,9 +32,10 @@ export const useMapsLocations = (center: { latitude: number; longitude: number }
       });
       return (res.data?.data || []) as MapMarker[];
     },
+    placeholderData: (previousData) => previousData,
     refetchInterval: 30000, // Background refresh every 30 seconds to sync map markers
-    retry: 2,
-    staleTime: 10000,
+    retry: 1,
+    staleTime: 15000,
   });
 };
 

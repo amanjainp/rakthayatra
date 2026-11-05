@@ -27,7 +27,7 @@ const getClientApiKey = (): string => {
     const getImportMetaEnv = new Function('try { return import.meta.env; } catch { return undefined; }');
     const env = getImportMetaEnv();
     if (env && env.VITE_GOOGLE_MAPS_API_KEY) return env.VITE_GOOGLE_MAPS_API_KEY;
-  } catch {}
+  } catch { }
   if (typeof process !== 'undefined' && process.env && (process.env as any).VITE_GOOGLE_MAPS_API_KEY) {
     return (process.env as any).VITE_GOOGLE_MAPS_API_KEY;
   }
@@ -367,7 +367,7 @@ export const EmergencyMap: React.FC = () => {
 
       {/* Main Map Split Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Side: Search Options & Active Marker Detail Panel */}
         <div className="p-6 rounded-2xl border border-slate-800/80 bg-slate-900/20 backdrop-blur-md space-y-6 flex flex-col justify-between">
           <div className="space-y-6">
@@ -377,7 +377,7 @@ export const EmergencyMap: React.FC = () => {
                 {filteredMarkers.length} Found
               </span>
             </div>
-            
+
             {/* Radius Slider */}
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-slate-400 font-bold">
@@ -506,13 +506,12 @@ export const EmergencyMap: React.FC = () => {
 
         {/* Right Side: Map Canvas Plotter (Google Maps or Fallback Radar Vector Map) */}
         <div className="lg:col-span-2 relative aspect-[4/3] w-full rounded-2xl border border-slate-800/80 bg-slate-950 overflow-hidden flex items-center justify-center select-none shadow-2xl">
-          
+
           {/* Mode 1: Real Google Maps Container */}
           <div
             ref={googleMapRef}
-            className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${
-              isGoogleMapsReady && !isLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${isGoogleMapsReady && !isLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+              }`}
           />
 
           {/* Mode 2: Radar Vector Map Fallback (Active when Google Maps key is not present or SDK is loading/offline) */}
@@ -532,41 +531,42 @@ export const EmergencyMap: React.FC = () => {
                 <circle cx="200" cy="150" r="4" fill="#0284c7" stroke="#ffffff" strokeWidth="1.5" />
 
                 {/* Plot filtered markers offset from center */}
-                {!isLoading &&
-                  filteredInventoryCoords(filteredMarkers, center, radius).map((marker) => {
-                    const isEmergency = marker.type === 'EMERGENCY_REQUEST';
-                    const isBank = marker.type === 'BLOOD_BANK';
-                    const color = isEmergency ? '#f43f5e' : isBank ? '#10b981' : '#f59e0b';
-                    const isSelected = activeMarker?.id === marker.id;
+                    {
+                      filteredInventoryCoords(filteredMarkers, center, radius).map((marker) => {
+                        const isEmergency = marker.type === 'EMERGENCY_REQUEST';
+                        const isBank = marker.type === 'BLOOD_BANK';
+                        const color = isEmergency ? '#f43f5e' : isBank ? '#10b981' : '#f59e0b';
+                        const isSelected = activeMarker?.id === marker.id;
 
-                    return (
-                      <g key={marker.id} className="cursor-pointer group" onClick={() => setActiveMarker(marker)}>
-                        {isSelected && (
-                          <circle cx={marker.x} cy={marker.y} r="10" fill={color} fillOpacity="0.3" className="animate-pulse" />
-                        )}
-                        <circle
-                          cx={marker.x}
-                          cy={marker.y}
-                          r={isSelected ? '6.5' : '5'}
-                          fill={color}
-                          stroke="#ffffff"
-                          strokeWidth="1.2"
-                          className={isEmergency ? 'animate-pulse' : ''}
-                        />
-                        {/* Hover Tooltip Label */}
-                        <text
-                          x={marker.x + 8}
-                          y={marker.y + 4}
-                          fill="#f8fafc"
-                          fontSize="9"
-                          fontWeight="600"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none drop-shadow"
-                        >
-                          {marker.name}
-                        </text>
-                      </g>
-                    );
-                  })}
+                        return (
+                          <g key={marker.id} className="cursor-pointer group" onClick={() => setActiveMarker(marker)}>
+                            {isSelected && (
+                              <circle cx={marker.x} cy={marker.y} r="10" fill={color} fillOpacity="0.3" className="animate-pulse" />
+                            )}
+                            <circle
+                              cx={marker.x}
+                              cy={marker.y}
+                              r={isSelected ? '6.5' : '5'}
+                              fill={color}
+                              stroke="#ffffff"
+                              strokeWidth="1.2"
+                              className={isEmergency ? 'animate-pulse' : ''}
+                            />
+                            {/* Hover Tooltip Label */}
+                            <text
+                              x={marker.x + 8}
+                              y={marker.y + 4}
+                              fill="#f8fafc"
+                              fontSize="9"
+                              fontWeight="600"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none drop-shadow"
+                            >
+                              {marker.name}
+                            </text>
+                          </g>
+                        );
+                      })
+                    }
               </svg>
             </div>
           )}
@@ -600,17 +600,17 @@ export const EmergencyMap: React.FC = () => {
           )}
 
           {/* Loading Overlay */}
-          {isLoading && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-20">
-              <div className="w-10 h-10 rounded-full border-2 border-rose-500/20 border-t-rose-500 animate-spin flex items-center justify-center">
-                <Compass className="w-5 h-5 text-rose-400" />
+            { isLoading && filteredMarkers.length === 0 && (
+              <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-20">
+                <div className="w-10 h-10 rounded-full border-2 border-rose-500/20 border-t-rose-500 animate-spin flex items-center justify-center">
+                  <Compass className="w-5 h-5 text-rose-400" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-semibold text-slate-200">Plotting geocoded markers...</p>
+                  <p className="text-xs text-slate-500">Scanning {radius} km radius for active blood resources</p>
+                </div>
               </div>
-              <div className="text-center space-y-1">
-                <p className="text-sm font-semibold text-slate-200">Plotting geocoded markers...</p>
-                <p className="text-xs text-slate-500">Scanning {radius} km radius for active blood resources</p>
-              </div>
-            </div>
-          )}
+            )}
 
           {/* Empty State: Zero Results within Radius */}
           {!isLoading && !isError && filteredMarkers.length === 0 && (
@@ -675,7 +675,7 @@ export const EmergencyMap: React.FC = () => {
 // Helper to plot latitude/longitude offsets inside 400x300 canvas grid with dispersion
 function filteredInventoryCoords(markers: MapMarker[], center: { latitude: number; longitude: number }, radius: number) {
   const scale = 130 / radius; // map radius limit to max ring radius (130px)
-  
+
   // 1. Calculate raw offsets
   const rawPlotted = markers.map((m) => {
     const latDiff = m.latitude - center.latitude;
@@ -695,14 +695,14 @@ function filteredInventoryCoords(markers: MapMarker[], center: { latitude: numbe
   // 2. Disperse overlapping coordinates in pixels (min 18px separation)
   const dispersed: typeof rawPlotted = [];
   const minDistance = 18;
-  
+
   for (const marker of rawPlotted) {
     let currentX = marker.x;
     let currentY = marker.y;
     let angle = 0;
     let step = 15; // starting pixel offset distance
     let iterations = 0;
-    
+
     const conflicts = () => {
       // Prevent overlapping directly on the center radar target (200, 150)
       const distToCenter = Math.sqrt(Math.pow(currentX - 200, 2) + Math.pow(currentY - 150, 2));
@@ -725,7 +725,7 @@ function filteredInventoryCoords(markers: MapMarker[], center: { latitude: numbe
       }
       iterations++;
     }
-    
+
     dispersed.push({
       ...marker,
       x: currentX,
