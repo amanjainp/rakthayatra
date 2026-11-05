@@ -123,6 +123,7 @@ export const EmergencyMap: React.FC = () => {
             latitude: center.latitude,
             longitude: center.longitude,
           },
+          timeout: 3000,
         });
         if (isMounted && res.data?.data?.address) {
           const rawAddress = res.data.data.address;
