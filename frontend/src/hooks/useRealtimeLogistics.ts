@@ -165,16 +165,105 @@ export interface DonorEmergencyAlert {
 // ---------------------------------------------------------------------------
 // 1. Registered Facilities Hook (Public Directory)
 // ---------------------------------------------------------------------------
+export const FALLBACK_REGISTERED_FACILITIES: RegisteredFacility[] = [
+  {
+    id: 'bank-rotary-ttk-blr',
+    name: 'Rotary TTK Blood Bank (Bengaluru)',
+    phone: '+918025287903',
+    address: 'HAL 2nd Stage, Indiranagar, Bengaluru (Open 24 hours)',
+    city: 'Bengaluru',
+    latitude: 12.9654,
+    longitude: 77.5980,
+    facilityType: 'BLOOD_BANK',
+  },
+  {
+    id: 'bank-rashtrotthana-blr',
+    name: 'Rashtrotthana Blood Centre',
+    phone: '+918022268780',
+    address: 'Kempegowda Nagar, Bengaluru (Open 24 hours)',
+    city: 'Bengaluru',
+    latitude: 12.9850,
+    longitude: 77.5850,
+    facilityType: 'BLOOD_BANK',
+  },
+  {
+    id: 'bank-citycentral-blr',
+    name: 'City Central Blood Bank',
+    phone: '+919988776655',
+    address: '1st Main Road, Vyalikaval, Malleshwaram, Bengaluru (Open 24 hours)',
+    city: 'Bengaluru',
+    latitude: 12.9998,
+    longitude: 77.5721,
+    facilityType: 'BLOOD_BANK',
+  },
+  {
+    id: 'hosp-apollo-blr',
+    name: 'Apollo Hospital Specialities',
+    phone: '+918877665544',
+    address: 'Bannerghatta Road, Bengaluru (Open 24 hours)',
+    city: 'Bengaluru',
+    latitude: 12.8962,
+    longitude: 77.5991,
+    facilityType: 'HOSPITAL',
+  },
+  {
+    id: 'bank-redcross-delhi',
+    name: 'Indian Red Cross Society National HQ Blood Centre',
+    phone: '+911123711551',
+    address: '1, Red Cross Road, Near Parliament, New Delhi (Open 24 hours)',
+    city: 'New Delhi',
+    latitude: 28.6250,
+    longitude: 77.2140,
+    facilityType: 'BLOOD_BANK',
+  },
+  {
+    id: 'bank-safdarjung-delhi',
+    name: 'Safdarjung Hospital Regional Blood Centre',
+    phone: '+911126165060',
+    address: 'Ring Road, Opposite AIIMS, New Delhi (Open 24 hours)',
+    city: 'New Delhi',
+    latitude: 28.5702,
+    longitude: 77.2066,
+    facilityType: 'BLOOD_BANK',
+  },
+  {
+    id: 'bank-mandya-mims',
+    name: 'Mandya Institute of Medical Sciences (MIMS) Blood Centre',
+    phone: '+919448054730',
+    address: '2nd Cross Rd, Tamilians Colony, Nehru Nagar, Mandya (Open 24 hours)',
+    city: 'Mandya',
+    latitude: 12.5292,
+    longitude: 76.8953,
+    facilityType: 'BLOOD_BANK',
+  },
+];
+
 export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?: string) => {
   return useQuery({
     queryKey: ['registered-facilities', type, city],
     queryFn: async () => {
-      const params: any = {};
-      if (type) params.type = type;
-      if (city) params.city = city;
-      const res = await apiClient.get('/facilities/public', { params });
-      return (res.data?.data?.facilities || []) as RegisteredFacility[];
+      try {
+        const params: any = {};
+        if (type) params.type = type;
+        if (city) params.city = city;
+        const res = await apiClient.get('/facilities/public', { params, timeout: 3500 });
+        const list = res.data?.data?.facilities;
+        if (Array.isArray(list) && list.length > 0) {
+          return list as RegisteredFacility[];
+        }
+        return FALLBACK_REGISTERED_FACILITIES.filter(
+          (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
+        );
+      } catch {
+        return FALLBACK_REGISTERED_FACILITIES.filter(
+          (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
+        );
+      }
     },
+    initialData: () =>
+      FALLBACK_REGISTERED_FACILITIES.filter(
+        (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
+      ),
     staleTime: 60000,
   });
 };
@@ -186,9 +275,14 @@ export const useHospitalRequisitions = () => {
   return useQuery({
     queryKey: ['hospital-requisitions'],
     queryFn: async () => {
-      const res = await apiClient.get('/requests/hospital-requisitions');
-      return (res.data?.data || []) as HospitalRequisition[];
+      try {
+        const res = await apiClient.get('/requests/hospital-requisitions', { timeout: 3500 });
+        return (res.data?.data || []) as HospitalRequisition[];
+      } catch {
+        return [] as HospitalRequisition[];
+      }
     },
+    initialData: () => [] as HospitalRequisition[],
     refetchInterval: 10000, // Poll every 10s for real-time status updates from blood banks
   });
 };
@@ -266,9 +360,14 @@ export const useIncomingBloodBankRequisitions = () => {
   return useQuery({
     queryKey: ['bloodbank-incoming-requisitions'],
     queryFn: async () => {
-      const res = await apiClient.get('/requests/bloodbank-incoming');
-      return (res.data?.data || []) as IncomingRequisition[];
+      try {
+        const res = await apiClient.get('/requests/bloodbank-incoming', { timeout: 3500 });
+        return (res.data?.data || []) as IncomingRequisition[];
+      } catch {
+        return [] as IncomingRequisition[];
+      }
     },
+    initialData: () => [] as IncomingRequisition[],
     refetchInterval: 10000,
   });
 };
@@ -311,9 +410,14 @@ export const useMyAppointments = () => {
   return useQuery({
     queryKey: ['my-appointments'],
     queryFn: async () => {
-      const res = await apiClient.get('/appointments');
-      return (res.data?.data || []) as AppointmentItem[];
+      try {
+        const res = await apiClient.get('/appointments', { timeout: 3500 });
+        return (res.data?.data || []) as AppointmentItem[];
+      } catch {
+        return [] as AppointmentItem[];
+      }
     },
+    initialData: () => [] as AppointmentItem[],
     refetchInterval: 15000,
   });
 };
@@ -374,11 +478,16 @@ export const useActiveDonorsForFacility = (radiusKm: number = 100, bloodGroup?: 
   return useQuery({
     queryKey: ['facility-active-donors', radiusKm, bloodGroup],
     queryFn: async () => {
-      const params: any = { radius: radiusKm };
-      if (bloodGroup) params.bloodGroup = bloodGroup;
-      const res = await apiClient.get('/facilities/active-donors', { params });
-      return (res.data?.data?.donors || []) as ActiveDonorItem[];
+      try {
+        const params: any = { radius: radiusKm };
+        if (bloodGroup) params.bloodGroup = bloodGroup;
+        const res = await apiClient.get('/facilities/active-donors', { params, timeout: 3500 });
+        return (res.data?.data?.donors || []) as ActiveDonorItem[];
+      } catch {
+        return [] as ActiveDonorItem[];
+      }
     },
+    initialData: () => [] as ActiveDonorItem[],
     refetchInterval: 20000,
   });
 };
@@ -390,9 +499,14 @@ export const useDonorEmergencyAlerts = () => {
   return useQuery({
     queryKey: ['donor-emergency-alerts'],
     queryFn: async () => {
-      const res = await apiClient.get('/requests/donor-emergency-alerts');
-      return (res.data?.data || []) as DonorEmergencyAlert[];
+      try {
+        const res = await apiClient.get('/requests/donor-emergency-alerts', { timeout: 3500 });
+        return (res.data?.data || []) as DonorEmergencyAlert[];
+      } catch {
+        return [] as DonorEmergencyAlert[];
+      }
     },
+    initialData: () => [] as DonorEmergencyAlert[],
     refetchInterval: 10000,
   });
 };

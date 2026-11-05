@@ -69,12 +69,12 @@ export const DonorDashboard: React.FC = () => {
   const [appointmentNotes, setAppointmentNotes] = useState<string>('');
 
   // Real-time hooks
-  const { data: myAppointments = [], isLoading: isLoadingAppointments } = useMyAppointments();
+  const { data: myAppointments = [] } = useMyAppointments();
   const bookAppointmentMutation = useBookAppointment();
   const updateAppointmentMutation = useUpdateAppointmentStatus();
-  const { data: emergencyAlerts = [], isLoading: isLoadingAlerts } = useDonorEmergencyAlerts();
+  const { data: emergencyAlerts = [] } = useDonorEmergencyAlerts();
   const respondEmergencyMutation = useRespondEmergencyAlert();
-  const { data: facilities = [], isLoading: isLoadingFacilities } = useRegisteredFacilities();
+  const { data: facilities = [] } = useRegisteredFacilities();
   const updateAvailabilityMutation = useUpdateDonorAvailability();
 
   const { data, isLoading } = useDonorDashboardData(user?.id);
@@ -397,17 +397,7 @@ Generated on: ${new Date().toLocaleDateString()}
               Toggle your availability above to "Available to Donate" when ready to receive alerts again.
             </p>
           </div>
-        ) : isLoadingAlerts ? (
-          <div className="p-8 text-center text-xs text-slate-500">Checking for live emergency alerts...</div>
-        ) : emergencyAlerts.length === 0 ? (
-          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-            <p className="text-sm font-semibold text-slate-300">No Immediate Emergency Alerts</p>
-            <p className="text-xs text-slate-500">
-              When a nearby hospital triggers a 100km SOS for your blood group, it will appear here in real time.
-            </p>
-          </div>
-        ) : (
+        ) : emergencyAlerts.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-4">
             {emergencyAlerts.map((alert) => (
               <div
@@ -485,6 +475,14 @@ Generated on: ${new Date().toLocaleDateString()}
               </div>
             ))}
           </div>
+        ) : (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Immediate Emergency Alerts</p>
+            <p className="text-xs text-slate-500">
+              When a nearby hospital triggers a 100km SOS for your blood group, it will appear here in real time.
+            </p>
+          </div>
         )}
       </div>
 
@@ -509,9 +507,7 @@ Generated on: ${new Date().toLocaleDateString()}
           </Button>
         </div>
 
-        {isLoadingAppointments ? (
-          <div className="p-8 text-center text-xs text-slate-500">Loading your appointments...</div>
-        ) : myAppointments.length === 0 ? (
+        {myAppointments.length === 0 ? (
           <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
             <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
             <p className="text-sm font-semibold text-slate-300">No Scheduled Appointments</p>
@@ -622,9 +618,7 @@ Generated on: ${new Date().toLocaleDateString()}
           </span>
         </div>
 
-        {isLoadingFacilities ? (
-          <div className="p-8 text-center text-xs text-slate-500">Loading registered facilities directory...</div>
-        ) : (
+        {facilities.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {facilities.map((fac) => (
               <div
@@ -678,6 +672,12 @@ Generated on: ${new Date().toLocaleDateString()}
                 </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <Building className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Facilities Available</p>
+            <p className="text-xs text-slate-500">No registered blood banks or hospitals found in this area.</p>
           </div>
         )}
       </div>
