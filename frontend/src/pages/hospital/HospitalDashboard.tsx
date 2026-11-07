@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building,
   Plus,
@@ -24,6 +24,7 @@ import {
   useRegisteredFacilities,
   useActiveDonorsForFacility,
   HospitalRequisition,
+  FALLBACK_REGISTERED_FACILITIES,
 } from '../../hooks/useRealtimeLogistics';
 
 export const HospitalDashboard: React.FC = () => {
@@ -47,6 +48,13 @@ export const HospitalDashboard: React.FC = () => {
   const [urgency, setUrgency] = useState<'NORMAL' | 'EMERGENCY'>('NORMAL');
   const [message, setMessage] = useState('');
 
+  // Auto-select first blood bank when available
+  useEffect(() => {
+    if (!targetBankId && bloodBanks.length > 0) {
+      setTargetBankId(bloodBanks[0].id);
+    }
+  }, [bloodBanks, targetBankId]);
+
   // Emergency Broadcast Form state
   const [broadcastRadius, setBroadcastRadius] = useState(50);
   const [broadcastGroup, setBroadcastGroup] = useState('O_POS');
@@ -59,11 +67,17 @@ export const HospitalDashboard: React.FC = () => {
 
   const handleCreateRequisitionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetBankId) return;
+    const resolvedBankId =
+      targetBankId ||
+      bloodBanks[0]?.id ||
+      FALLBACK_REGISTERED_FACILITIES.find((f) => f.facilityType === 'BLOOD_BANK')?.id ||
+      '';
+
+    if (!resolvedBankId) return;
 
     try {
       await createRequisition.mutateAsync({
-        targetBloodBankId: targetBankId,
+        targetBloodBankId: resolvedBankId,
         bloodGroup,
         unitsRequired: Number(unitsRequired),
         urgency,
@@ -213,7 +227,12 @@ export const HospitalDashboard: React.FC = () => {
             </p>
             <Button
               variant="outline"
-              onClick={() => setIsRequisitionOpen(true)}
+              onClick={() => {
+                if (bloodBanks.length > 0 && !targetBankId) {
+                  setTargetBankId(bloodBanks[0].id);
+                }
+                setIsRequisitionOpen(true);
+              }}
               className="text-xs"
             >
               Raise Requisition
