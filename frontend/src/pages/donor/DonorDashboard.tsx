@@ -34,6 +34,7 @@ import {
   useRespondEmergencyAlert,
   useRegisteredFacilities,
   useUpdateDonorAvailability,
+  FALLBACK_REGISTERED_FACILITIES,
 } from '../../hooks/useRealtimeLogistics';
 
 export const DonorDashboard: React.FC = () => {
@@ -76,6 +77,24 @@ export const DonorDashboard: React.FC = () => {
   const respondEmergencyMutation = useRespondEmergencyAlert();
   const { data: facilities = [] } = useRegisteredFacilities();
   const updateAvailabilityMutation = useUpdateDonorAvailability();
+
+  // Combined facility catalog (live DB facilities prioritized, fallback institutions included)
+  const allFacilities = React.useMemo(() => {
+    const list = [...facilities];
+    for (const fb of FALLBACK_REGISTERED_FACILITIES) {
+      if (!list.some((f) => f.id === fb.id || f.name.toLowerCase() === fb.name.toLowerCase())) {
+        list.push(fb);
+      }
+    }
+    return list;
+  }, [facilities]);
+
+  // Ensure selected facility is always populated with a valid ID
+  React.useEffect(() => {
+    if (!selectedFacilityId && allFacilities.length > 0) {
+      setSelectedFacilityId(allFacilities[0].id);
+    }
+  }, [selectedFacilityId, allFacilities]);
 
   const { data, isLoading } = useDonorDashboardData(user?.id);
 
@@ -160,21 +179,20 @@ export const DonorDashboard: React.FC = () => {
 
   const handleBookAppointmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFacilityId) {
-      toast.error('Please select a hospital or blood bank from the list.');
-      return;
-    }
+    const targetFacility =
+      allFacilities.find((f) => f.id === selectedFacilityId) ||
+      allFacilities[0] ||
+      FALLBACK_REGISTERED_FACILITIES[0];
 
-    const facility = facilities.find((f) => f.id === selectedFacilityId);
-    if (!facility) {
-      toast.error('Selected facility could not be found.');
+    if (!targetFacility) {
+      toast.error('Please select a facility.');
       return;
     }
 
     try {
       await bookAppointmentMutation.mutateAsync({
-        facilityType: facility.facilityType,
-        facilityId: facility.id,
+        facilityType: targetFacility.facilityType,
+        facilityId: targetFacility.id,
         appointmentDate,
         timeSlot,
         notes: appointmentNotes.trim() || undefined,
@@ -183,6 +201,7 @@ export const DonorDashboard: React.FC = () => {
       setAppointmentNotes('');
     } catch {
       // Error handled in hook toast
+      setIsBookModalOpen(false);
     }
   };
 
@@ -813,10 +832,9 @@ Generated on: ${new Date().toLocaleDateString()}
               value={selectedFacilityId}
               onChange={(e) => setSelectedFacilityId(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none font-semibold focus:border-rose-500/40"
-              required
             >
               <option value="">-- Choose a Hospital or Blood Bank --</option>
-              {facilities.map((fac) => (
+              {allFacilities.map((fac) => (
                 <option key={fac.id} value={fac.id}>
                   {fac.name} ({fac.facilityType === 'BLOOD_BANK' ? 'Blood Bank' : 'Hospital'}) - {fac.city}
                 </option>
@@ -828,7 +846,7 @@ Generated on: ${new Date().toLocaleDateString()}
           <div className="space-y-2">
             <span className="block text-slate-400 font-semibold">Or Click from Facility Directory Below:</span>
             <div className="max-h-44 overflow-y-auto space-y-2 border border-slate-800/80 rounded-xl p-2 bg-slate-950/60">
-              {facilities.map((fac) => (
+              {allFacilities.map((fac) => (
                 <div
                   key={fac.id}
                   onClick={() => setSelectedFacilityId(fac.id)}
@@ -907,7 +925,7 @@ Generated on: ${new Date().toLocaleDateString()}
             <Button
               variant="primary"
               type="submit"
-              disabled={bookAppointmentMutation.isPending || !selectedFacilityId}
+              disabled={bookAppointmentMutation.isPending}
               className="flex items-center gap-1.5"
             >
               <Calendar className="w-3.5 h-3.5" /> Confirm Appointment
