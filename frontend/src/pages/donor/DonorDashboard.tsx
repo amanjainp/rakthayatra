@@ -34,7 +34,6 @@ import {
   useRespondEmergencyAlert,
   useRegisteredFacilities,
   useUpdateDonorAvailability,
-  FALLBACK_REGISTERED_FACILITIES,
 } from '../../hooks/useRealtimeLogistics';
 
 export const DonorDashboard: React.FC = () => {
@@ -70,31 +69,13 @@ export const DonorDashboard: React.FC = () => {
   const [appointmentNotes, setAppointmentNotes] = useState<string>('');
 
   // Real-time hooks
-  const { data: myAppointments = [] } = useMyAppointments();
+  const { data: myAppointments = [], isLoading: isLoadingAppointments } = useMyAppointments();
   const bookAppointmentMutation = useBookAppointment();
   const updateAppointmentMutation = useUpdateAppointmentStatus();
-  const { data: emergencyAlerts = [] } = useDonorEmergencyAlerts();
+  const { data: emergencyAlerts = [], isLoading: isLoadingAlerts } = useDonorEmergencyAlerts();
   const respondEmergencyMutation = useRespondEmergencyAlert();
-  const { data: facilities = [] } = useRegisteredFacilities();
+  const { data: facilities = [], isLoading: isLoadingFacilities } = useRegisteredFacilities();
   const updateAvailabilityMutation = useUpdateDonorAvailability();
-
-  // Combined facility catalog (live DB facilities prioritized, fallback institutions included)
-  const allFacilities = React.useMemo(() => {
-    const list = [...facilities];
-    for (const fb of FALLBACK_REGISTERED_FACILITIES) {
-      if (!list.some((f) => f.id === fb.id || f.name.toLowerCase() === fb.name.toLowerCase())) {
-        list.push(fb);
-      }
-    }
-    return list;
-  }, [facilities]);
-
-  // Ensure selected facility is always populated with a valid ID
-  React.useEffect(() => {
-    if (!selectedFacilityId && allFacilities.length > 0) {
-      setSelectedFacilityId(allFacilities[0].id);
-    }
-  }, [selectedFacilityId, allFacilities]);
 
   const { data, isLoading } = useDonorDashboardData(user?.id);
 
@@ -179,20 +160,21 @@ export const DonorDashboard: React.FC = () => {
 
   const handleBookAppointmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetFacility =
-      allFacilities.find((f) => f.id === selectedFacilityId) ||
-      allFacilities[0] ||
-      FALLBACK_REGISTERED_FACILITIES[0];
+    if (!selectedFacilityId) {
+      toast.error('Please select a hospital or blood bank from the list.');
+      return;
+    }
 
-    if (!targetFacility) {
-      toast.error('Please select a facility.');
+    const facility = facilities.find((f) => f.id === selectedFacilityId);
+    if (!facility) {
+      toast.error('Selected facility could not be found.');
       return;
     }
 
     try {
       await bookAppointmentMutation.mutateAsync({
-        facilityType: targetFacility.facilityType,
-        facilityId: targetFacility.id,
+        facilityType: facility.facilityType,
+        facilityId: facility.id,
         appointmentDate,
         timeSlot,
         notes: appointmentNotes.trim() || undefined,
@@ -201,7 +183,6 @@ export const DonorDashboard: React.FC = () => {
       setAppointmentNotes('');
     } catch {
       // Error handled in hook toast
-      setIsBookModalOpen(false);
     }
   };
 
@@ -416,7 +397,17 @@ Generated on: ${new Date().toLocaleDateString()}
               Toggle your availability above to "Available to Donate" when ready to receive alerts again.
             </p>
           </div>
-        ) : emergencyAlerts.length > 0 ? (
+        ) : isLoadingAlerts ? (
+          <div className="p-8 text-center text-xs text-slate-500">Checking for live emergency alerts...</div>
+        ) : emergencyAlerts.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Immediate Emergency Alerts</p>
+            <p className="text-xs text-slate-500">
+              When a nearby hospital triggers a 100km SOS for your blood group, it will appear here in real time.
+            </p>
+          </div>
+        ) : (
           <div className="grid md:grid-cols-2 gap-4">
             {emergencyAlerts.map((alert) => (
               <div
@@ -494,14 +485,6 @@ Generated on: ${new Date().toLocaleDateString()}
               </div>
             ))}
           </div>
-        ) : (
-          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-            <p className="text-sm font-semibold text-slate-300">No Immediate Emergency Alerts</p>
-            <p className="text-xs text-slate-500">
-              When a nearby hospital triggers a 100km SOS for your blood group, it will appear here in real time.
-            </p>
-          </div>
         )}
       </div>
 
@@ -526,7 +509,9 @@ Generated on: ${new Date().toLocaleDateString()}
           </Button>
         </div>
 
-        {myAppointments.length === 0 ? (
+        {isLoadingAppointments ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading your appointments...</div>
+        ) : myAppointments.length === 0 ? (
           <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
             <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
             <p className="text-sm font-semibold text-slate-300">No Scheduled Appointments</p>
@@ -637,7 +622,9 @@ Generated on: ${new Date().toLocaleDateString()}
           </span>
         </div>
 
-        {facilities.length > 0 ? (
+        {isLoadingFacilities ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading registered facilities directory...</div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {facilities.map((fac) => (
               <div
@@ -691,12 +678,6 @@ Generated on: ${new Date().toLocaleDateString()}
                 </div>
               </div>
             ))}
-          </div>
-        ) : (
-          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
-            <Building className="w-8 h-8 text-slate-600 mx-auto" />
-            <p className="text-sm font-semibold text-slate-300">No Facilities Available</p>
-            <p className="text-xs text-slate-500">No registered blood banks or hospitals found in this area.</p>
           </div>
         )}
       </div>
@@ -832,9 +813,10 @@ Generated on: ${new Date().toLocaleDateString()}
               value={selectedFacilityId}
               onChange={(e) => setSelectedFacilityId(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-100 outline-none font-semibold focus:border-rose-500/40"
+              required
             >
               <option value="">-- Choose a Hospital or Blood Bank --</option>
-              {allFacilities.map((fac) => (
+              {facilities.map((fac) => (
                 <option key={fac.id} value={fac.id}>
                   {fac.name} ({fac.facilityType === 'BLOOD_BANK' ? 'Blood Bank' : 'Hospital'}) - {fac.city}
                 </option>
@@ -846,7 +828,7 @@ Generated on: ${new Date().toLocaleDateString()}
           <div className="space-y-2">
             <span className="block text-slate-400 font-semibold">Or Click from Facility Directory Below:</span>
             <div className="max-h-44 overflow-y-auto space-y-2 border border-slate-800/80 rounded-xl p-2 bg-slate-950/60">
-              {allFacilities.map((fac) => (
+              {facilities.map((fac) => (
                 <div
                   key={fac.id}
                   onClick={() => setSelectedFacilityId(fac.id)}
@@ -925,7 +907,7 @@ Generated on: ${new Date().toLocaleDateString()}
             <Button
               variant="primary"
               type="submit"
-              disabled={bookAppointmentMutation.isPending}
+              disabled={bookAppointmentMutation.isPending || !selectedFacilityId}
               className="flex items-center gap-1.5"
             >
               <Calendar className="w-3.5 h-3.5" /> Confirm Appointment

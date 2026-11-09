@@ -16,26 +16,11 @@ export class AppointmentService {
    * Book a real blood donation appointment at a registered hospital or blood bank.
    */
   async bookAppointment(userId: string, data: BookAppointmentDto) {
-    // 1. Verify Donor Profile exists (with fallback to default donor profile for demo/session resilience)
-    let donor = await prisma.donorProfile.findUnique({
+    // 1. Verify Donor Profile exists
+    const donor = await prisma.donorProfile.findUnique({
       where: { userId },
       include: { eligibility: true, user: true },
     });
-
-    if (!donor) {
-      const fallbackUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: 'aman.jain@donor.org' },
-            { role: { name: 'DONOR' } },
-          ],
-        },
-        include: { donorProfile: { include: { eligibility: true, user: true } } },
-      });
-      if (fallbackUser?.donorProfile) {
-        donor = fallbackUser.donorProfile;
-      }
-    }
 
     if (!donor) {
       throw new Error('Donor profile not found for this user account.');
@@ -43,8 +28,7 @@ export class AppointmentService {
 
     // 2. Eligibility check: check medical eligibility and 90-day cooldown
     if (donor.eligibility && !donor.eligibility.isEligible) {
-      // If donor's assessment is pending, allow voluntary slot scheduling
-      logger.info(`[Appointment] Donor ${donor.id} booking slot with pending medical questionnaire.`);
+      throw new Error('Donor is currently marked as not medically eligible to donate.');
     }
 
     if (donor.lastDonationDate) {
@@ -52,7 +36,7 @@ export class AppointmentService {
       const daysSince = Math.floor(
         (Date.now() - new Date(donor.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24)
       );
-      if (daysSince < cooldownDays && daysSince > 0) {
+      if (daysSince < cooldownDays) {
         throw new Error(
           `Minimum interval between blood donations is 90 days. You have ${cooldownDays - daysSince} days remaining before your next eligible donation.`
         );
@@ -66,22 +50,10 @@ export class AppointmentService {
     let bloodBankId: string | null = null;
 
     if (data.facilityType === 'HOSPITAL') {
-      let hosp = await prisma.hospitalProfile.findUnique({
+      const hosp = await prisma.hospitalProfile.findUnique({
         where: { id: data.facilityId },
         include: { user: true },
       });
-      if (!hosp) {
-        // Fallback: match by known facility name or first verified hospital
-        hosp = await prisma.hospitalProfile.findFirst({
-          where: {
-            OR: [
-              { name: { contains: 'Apollo', mode: 'insensitive' } },
-              { isVerified: true },
-            ],
-          },
-          include: { user: true },
-        });
-      }
       if (!hosp) {
         throw new Error('Selected hospital is not registered or verified on LifeLink.');
       }
@@ -89,22 +61,10 @@ export class AppointmentService {
       facilityUserId = hosp.userId;
       hospitalId = hosp.id;
     } else {
-      let bank = await prisma.bloodBankProfile.findUnique({
+      const bank = await prisma.bloodBankProfile.findUnique({
         where: { id: data.facilityId },
         include: { user: true },
       });
-      if (!bank) {
-        // Fallback: match by known facility name or first verified blood bank
-        bank = await prisma.bloodBankProfile.findFirst({
-          where: {
-            OR: [
-              { name: { contains: 'City Central', mode: 'insensitive' } },
-              { isVerified: true },
-            ],
-          },
-          include: { user: true },
-        });
-      }
       if (!bank) {
         throw new Error('Selected blood bank is not registered or verified on LifeLink.');
       }
@@ -137,35 +97,27 @@ export class AppointmentService {
       },
     });
 
-    // 5. Send Real in-app Notification to the Facility (safeguarded against encoding errors)
+    // 5. Send Real in-app Notification to the Facility
     if (facilityUserId) {
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: facilityUserId,
-            title: '[LifeLink] New Donor Appointment Scheduled',
-            message: `Donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}) has booked an appointment on ${apptDate.toLocaleDateString()} for slot ${data.timeSlot}.`,
-            type: 'REQUEST_UPDATE',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`Failed to create facility notification: ${notifErr?.message}`);
-      }
-    }
-
-    // 6. Send Real in-app Notification to the Donor (safeguarded against encoding errors)
-    try {
       await prisma.notification.create({
         data: {
-          userId: donor.userId,
-          title: '[LifeLink] Donation Appointment Confirmed',
-          message: `Your appointment at ${facilityName} is confirmed for ${apptDate.toLocaleDateString()} (${data.timeSlot}). Please stay well-hydrated.`,
-          type: 'DONATION_REMINDER',
+          userId: facilityUserId,
+          title: '🗓️ New Donor Appointment Scheduled',
+          message: `Donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}) has booked an appointment on ${apptDate.toLocaleDateString()} for slot ${data.timeSlot}.`,
+          type: 'REQUEST_UPDATE',
         },
       });
-    } catch (notifErr: any) {
-      logger.warn(`Failed to create donor notification: ${notifErr?.message}`);
     }
+
+    // 6. Send Real in-app Notification to the Donor
+    await prisma.notification.create({
+      data: {
+        userId,
+        title: '✅ Donation Appointment Confirmed',
+        message: `Your appointment at ${facilityName} is confirmed for ${apptDate.toLocaleDateString()} (${data.timeSlot}). Please stay well-hydrated.`,
+        type: 'DONATION_REMINDER',
+      },
+    });
 
     logger.info(`[Appointment] Booked by donor ${donor.id} at ${facilityName} for ${apptDate.toISOString()}`);
     return appointment;
@@ -175,21 +127,9 @@ export class AppointmentService {
    * Get appointments for current donor.
    */
   async getDonorAppointments(userId: string) {
-    let donor = await prisma.donorProfile.findUnique({
+    const donor = await prisma.donorProfile.findUnique({
       where: { userId },
     });
-    if (!donor) {
-      const fallbackUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: 'aman.jain@donor.org' },
-            { role: { name: 'DONOR' } },
-          ],
-        },
-        include: { donorProfile: true },
-      });
-      donor = fallbackUser?.donorProfile || null;
-    }
     if (!donor) return [];
 
     return prisma.appointment.findMany({
@@ -278,19 +218,15 @@ export class AppointmentService {
         data: { lastDonationDate: new Date() },
       });
 
-      // Send completion notification to donor (safeguarded against encoding errors)
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: appt.donor.userId,
-            title: '[LifeLink] Blood Donation Completed',
-            message: `Thank you for saving lives! Your donation has been recorded. Your verified donation certificate is now available in your dashboard.`,
-            type: 'REQUEST_UPDATE',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`Failed to create completion notification: ${notifErr?.message}`);
-      }
+      // Send completion notification to donor
+      await prisma.notification.create({
+        data: {
+          userId: appt.donor.userId,
+          title: '🎉 Blood Donation Completed!',
+          message: `Thank you for saving lives! Your donation has been recorded. Your verified donation certificate is now available in your dashboard.`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
     } else if (status === 'CANCELLED') {
       // Notify other party
       const targetUserId =
@@ -299,18 +235,14 @@ export class AppointmentService {
           : appt.donor.userId;
 
       if (targetUserId) {
-        try {
-          await prisma.notification.create({
-            data: {
-              userId: targetUserId,
-              title: '[LifeLink] Appointment Cancelled',
-              message: `The scheduled donation appointment for ${appt.appointmentDate.toLocaleDateString()} (${appt.timeSlot}) has been cancelled.`,
-              type: 'REQUEST_UPDATE',
-            },
-          });
-        } catch (notifErr: any) {
-          logger.warn(`Failed to create cancellation notification: ${notifErr?.message}`);
-        }
+        await prisma.notification.create({
+          data: {
+            userId: targetUserId,
+            title: '⚠️ Appointment Cancelled',
+            message: `The scheduled donation appointment for ${appt.appointmentDate.toLocaleDateString()} (${appt.timeSlot}) has been cancelled.`,
+            type: 'REQUEST_UPDATE',
+          },
+        });
       }
     }
 

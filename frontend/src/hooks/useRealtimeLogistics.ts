@@ -165,207 +165,30 @@ export interface DonorEmergencyAlert {
 // ---------------------------------------------------------------------------
 // 1. Registered Facilities Hook (Public Directory)
 // ---------------------------------------------------------------------------
-export const FALLBACK_REGISTERED_FACILITIES: RegisteredFacility[] = [
-  {
-    id: '97b7e6cb-262a-4e44-b029-7ce85ae67110',
-    name: 'City Central Blood Bank',
-    licenseNumber: 'BB-12345-KAR',
-    phone: '+919988776655',
-    address: '1st Main Road, Vyalikaval, Malleshwaram, Bengaluru',
-    city: 'Bengaluru',
-    latitude: 12.9998,
-    longitude: 77.5721,
-    facilityType: 'BLOOD_BANK',
-  },
-  {
-    id: '6481ea74-b325-4dd6-b958-3b70543dcf5f',
-    name: 'Apollo Hospital Specialities',
-    licenseNumber: 'HOSP-99887-KAR',
-    phone: '+918877665544',
-    address: 'Bannerghatta Road, Bengaluru (Open 24 hours)',
-    city: 'Bengaluru',
-    latitude: 12.8962,
-    longitude: 77.5991,
-    facilityType: 'HOSPITAL',
-  },
-  {
-    id: '97997b10-1c1f-4a84-ad25-e032c4ce57b2',
-    name: 'Manipal Hospital Regional Center',
-    licenseNumber: 'HOSP-44321-KAR',
-    phone: '+918025024444',
-    address: 'Old Airport Road, Bengaluru (Open 24 hours)',
-    city: 'Bengaluru',
-    latitude: 12.9583,
-    longitude: 77.6489,
-    facilityType: 'HOSPITAL',
-  },
-  {
-    id: '1620dbc0-f5c6-4344-a8dd-39c1fc4fbe36',
-    name: 'Mandya District Blood Bank & Storage',
-    licenseNumber: '54321',
-    phone: '9742213108',
-    address: 'M.C. Road, Mandya, Karnataka, India',
-    city: 'Mandya',
-    latitude: 12.522,
-    longitude: 76.895,
-    facilityType: 'BLOOD_BANK',
-  },
-  {
-    id: 'd67a72e3-d0ff-4034-bc73-131d3f8f4f58',
-    name: 'Red Cross Society Mandya',
-    licenseNumber: 'BB-98765-KAR',
-    phone: '+918822334455',
-    address: 'Guthalu Road, Mandya, Karnataka, India',
-    city: 'Mandya',
-    latitude: 12.5185,
-    longitude: 76.8988,
-    facilityType: 'BLOOD_BANK',
-  },
-  {
-    id: '011d71de-84b5-41e0-b17f-25e423234627',
-    name: 'City Care Hospital',
-    licenseNumber: 'LIC-9988',
-    phone: '9876543210',
-    address: 'Main St 101, Bengaluru',
-    city: 'Bengaluru',
-    latitude: 12.97,
-    longitude: 77.59,
-    facilityType: 'HOSPITAL',
-  },
-  {
-    id: 'bank-rotary-ttk-blr',
-    name: 'Rotary TTK Blood Bank (Bengaluru)',
-    licenseNumber: 'BB-77665-KAR',
-    phone: '+918025287903',
-    address: 'HAL 2nd Stage, Indiranagar, Bengaluru (Open 24 hours)',
-    city: 'Bengaluru',
-    latitude: 12.9654,
-    longitude: 77.5980,
-    facilityType: 'BLOOD_BANK',
-  },
-  {
-    id: 'bank-rashtrotthana-blr',
-    name: 'Rashtrotthana Blood Centre',
-    licenseNumber: 'BB-33221-KAR',
-    phone: '+918022268780',
-    address: 'Kempegowda Nagar, Bengaluru (Open 24 hours)',
-    city: 'Bengaluru',
-    latitude: 12.9850,
-    longitude: 77.5850,
-    facilityType: 'BLOOD_BANK',
-  },
-];
-
 export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?: string) => {
   return useQuery({
     queryKey: ['registered-facilities', type, city],
     queryFn: async () => {
-      try {
-        const params: any = {};
-        if (type) params.type = type;
-        if (city) params.city = city;
-        const res = await apiClient.get('/facilities/public', { params, timeout: 3500 });
-        const list = res.data?.data?.facilities;
-        if (Array.isArray(list) && list.length > 0) {
-          return list as RegisteredFacility[];
-        }
-        return FALLBACK_REGISTERED_FACILITIES.filter(
-          (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
-        );
-      } catch {
-        return FALLBACK_REGISTERED_FACILITIES.filter(
-          (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
-        );
-      }
+      const params: any = {};
+      if (type) params.type = type;
+      if (city) params.city = city;
+      const res = await apiClient.get('/facilities/public', { params });
+      return (res.data?.data?.facilities || []) as RegisteredFacility[];
     },
-    initialData: () =>
-      FALLBACK_REGISTERED_FACILITIES.filter(
-        (f) => (!type || f.facilityType === type) && (!city || f.city.toLowerCase() === city.toLowerCase())
-      ),
     staleTime: 60000,
   });
 };
 
 // ---------------------------------------------------------------------------
-// 2. Hospital Requisitions Hooks with Resilient Fallback
+// 2. Hospital Requisitions Hooks
 // ---------------------------------------------------------------------------
-const REQUISITIONS_STORAGE_KEY = 'll_hospital_requisitions';
-
-export const getStoredRequisitions = (): HospitalRequisition[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(REQUISITIONS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-export const storeRequisitionLocally = (req: HospitalRequisition) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const list = getStoredRequisitions().filter((r) => r.id !== req.id);
-    list.unshift(req);
-    localStorage.setItem(REQUISITIONS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-};
-
-export const deleteStoredRequisition = (id: string) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const list = getStoredRequisitions().filter((r) => r.id !== id);
-    localStorage.setItem(REQUISITIONS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-};
-
-export const updateStoredRequisitionStatus = (
-  id: string,
-  status: 'PENDING' | 'APPROVED' | 'FULFILLED' | 'CANCELLED',
-  allocatedUnits?: number,
-  responseNotes?: string
-) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const list = getStoredRequisitions().map((r) => {
-      if (r.id === id) {
-        return {
-          ...r,
-          status,
-          allocatedUnits: allocatedUnits !== undefined ? allocatedUnits : r.allocatedUnits,
-          responseNotes: responseNotes !== undefined ? responseNotes : r.responseNotes,
-        };
-      }
-      return r;
-    });
-    localStorage.setItem(REQUISITIONS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-};
-
 export const useHospitalRequisitions = () => {
   return useQuery({
     queryKey: ['hospital-requisitions'],
     queryFn: async () => {
-      const localList = getStoredRequisitions();
-      try {
-        const res = await apiClient.get('/requests/hospital-requisitions', { timeout: 3500 });
-        const serverList = (res.data?.data || []) as HospitalRequisition[];
-        const map = new Map<string, HospitalRequisition>();
-        localList.forEach((r) => map.set(r.id, r));
-        serverList.forEach((r) => map.set(r.id, r));
-        return Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      } catch {
-        return localList;
-      }
+      const res = await apiClient.get('/requests/hospital-requisitions');
+      return (res.data?.data || []) as HospitalRequisition[];
     },
-    initialData: () => getStoredRequisitions(),
     refetchInterval: 10000, // Poll every 10s for real-time status updates from blood banks
   });
 };
@@ -380,70 +203,10 @@ export const useCreateHospitalRequisition = () => {
       urgency?: 'NORMAL' | 'EMERGENCY';
       message?: string;
     }) => {
-      // Find target bank details for local persistence if needed
-      const targetBank = FALLBACK_REGISTERED_FACILITIES.find(
-        (f) => f.id === payload.targetBloodBankId
-      );
-
-      try {
-        const res = await apiClient.post('/requests/hospital-requisition', payload, {
-          timeout: 4500,
-        });
-        if (res.data?.data) {
-          storeRequisitionLocally(res.data.data);
-          return res.data;
-        }
-      } catch (err: any) {
-        console.warn(
-          '[LifeLink Logistics] Requisition remote dispatch timeout/offline fallback activated:',
-          err.message
-        );
-      }
-
-      // Fast, resilient local fallback ticket
-      const localReq: HospitalRequisition = {
-        id: 'req-' + Math.random().toString(36).substring(2, 10),
-        requesterId: 'demo-hospital-user',
-        bloodGroup: payload.bloodGroup,
-        unitsRequired: payload.unitsRequired,
-        urgency: payload.urgency || 'NORMAL',
-        status: 'PENDING',
-        locationName: 'Hospital Clinical Operations Ward',
-        latitude: 12.8962,
-        longitude: 77.5991,
-        message: payload.message || '',
-        targetBloodBankId: payload.targetBloodBankId,
-        targetBloodBank: targetBank
-          ? {
-              id: targetBank.id,
-              name: targetBank.name,
-              phone: targetBank.phone,
-              address: targetBank.address,
-              city: targetBank.city,
-            }
-          : {
-              id: payload.targetBloodBankId,
-              name: 'City Central Blood Bank',
-              phone: '+919988776655',
-              address: '1st Main Road, Vyalikaval, Malleshwaram, Bengaluru',
-              city: 'Bengaluru',
-            },
-        allocatedUnits: 0,
-        acceptedDonorIds: [],
-        createdAt: new Date().toISOString(),
-      };
-
-      storeRequisitionLocally(localReq);
-      return { success: true, message: 'Requisition ticket raised successfully.', data: localReq };
+      const res = await apiClient.post('/requests/hospital-requisition', payload);
+      return res.data;
     },
-    onSuccess: (data: any) => {
-      if (data?.data) {
-        queryClient.setQueryData(['hospital-requisitions'], (old: HospitalRequisition[] = []) => {
-          const item = data.data as HospitalRequisition;
-          const filtered = old.filter((r) => r.id !== item.id);
-          return [item, ...filtered];
-        });
-      }
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
       toast.success('Requisition raised to blood bank successfully!');
     },
@@ -462,22 +225,8 @@ export const useEmergencyBroadcast = () => {
       radiusKm: number;
       message?: string;
     }) => {
-      try {
-        const res = await apiClient.post('/requests/emergency-broadcast', payload, {
-          timeout: 4500,
-        });
-        if (res.data) return res.data;
-      } catch (err: any) {
-        console.warn(
-          '[LifeLink Logistics] Emergency broadcast remote failed, activated local broadcast fallback:',
-          err.message
-        );
-      }
-      return {
-        success: true,
-        data: { alertedDonorsCount: 8 },
-        message: 'Emergency alert dispatched to nearby donors.',
-      };
+      const res = await apiClient.post('/requests/emergency-broadcast', payload);
+      return res.data;
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
@@ -496,21 +245,10 @@ export const useDeleteHospitalRequisition = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (requestId: string) => {
-      try {
-        await apiClient.delete(`/requests/${requestId}`, { timeout: 4000 });
-      } catch (err: any) {
-        console.warn(
-          '[LifeLink Logistics] Requisition remote deletion failed, removing locally:',
-          err.message
-        );
-      }
-      deleteStoredRequisition(requestId);
-      return { success: true };
+      const res = await apiClient.delete(`/requests/${requestId}`);
+      return res.data;
     },
-    onSuccess: (_data, requestId) => {
-      queryClient.setQueryData(['hospital-requisitions'], (old: HospitalRequisition[] = []) =>
-        old.filter((r) => r.id !== requestId)
-      );
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
       queryClient.invalidateQueries({ queryKey: ['bloodRequests'] });
       toast.success('Requisition deleted successfully.');
@@ -528,46 +266,9 @@ export const useIncomingBloodBankRequisitions = () => {
   return useQuery({
     queryKey: ['bloodbank-incoming-requisitions'],
     queryFn: async () => {
-      const localReqs = getStoredRequisitions();
-      const localAsIncoming: IncomingRequisition[] = localReqs.map((r) => ({
-        id: r.id,
-        requesterId: r.requesterId,
-        bloodGroup: r.bloodGroup,
-        unitsRequired: r.unitsRequired,
-        urgency: r.urgency,
-        status: r.status,
-        locationName: r.locationName,
-        message: r.message,
-        allocatedUnits: r.allocatedUnits,
-        responseNotes: r.responseNotes,
-        createdAt: r.createdAt,
-        requester: {
-          id: r.requesterId,
-          email: 'hospital@lifelink.org',
-          hospitalProfile: {
-            id: 'hosp-1',
-            name: r.locationName,
-            phone: '+918877665544',
-            address: 'Bannerghatta Road',
-            city: 'Bengaluru',
-          },
-        },
-      }));
-
-      try {
-        const res = await apiClient.get('/requests/bloodbank-incoming', { timeout: 3500 });
-        const serverList = (res.data?.data || []) as IncomingRequisition[];
-        const map = new Map<string, IncomingRequisition>();
-        localAsIncoming.forEach((item) => map.set(item.id, item));
-        serverList.forEach((item) => map.set(item.id, item));
-        return Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      } catch {
-        return localAsIncoming;
-      }
+      const res = await apiClient.get('/requests/bloodbank-incoming');
+      return (res.data?.data || []) as IncomingRequisition[];
     },
-    initialData: () => [],
     refetchInterval: 10000,
   });
 };
@@ -581,44 +282,15 @@ export const useProcessRequisition = () => {
       allocatedUnits?: number;
       responseNotes?: string;
     }) => {
-      const newStatus = payload.action === 'ACCEPT' ? 'FULFILLED' : 'CANCELLED';
-      try {
-        const res = await apiClient.post(
-          `/requests/${payload.requestId}/process-requisition`,
-          {
-            action: payload.action,
-            allocatedUnits: payload.allocatedUnits,
-            responseNotes: payload.responseNotes,
-          },
-          { timeout: 4000 }
-        );
-        updateStoredRequisitionStatus(
-          payload.requestId,
-          newStatus,
-          payload.allocatedUnits,
-          payload.responseNotes
-        );
-        return res.data;
-      } catch (err: any) {
-        console.warn(
-          '[LifeLink Logistics] Process requisition remote failed, updating locally:',
-          err.message
-        );
-      }
-      updateStoredRequisitionStatus(
-        payload.requestId,
-        newStatus,
-        payload.allocatedUnits,
-        payload.responseNotes
-      );
-      return {
-        success: true,
-        message: `Requisition ${payload.action === 'ACCEPT' ? 'accepted and allocated' : 'declined'}.`,
-      };
+      const res = await apiClient.post(`/requests/${payload.requestId}/process-requisition`, {
+        action: payload.action,
+        allocatedUnits: payload.allocatedUnits,
+        responseNotes: payload.responseNotes,
+      });
+      return res.data;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['bloodbank-incoming-requisitions'] });
-      queryClient.invalidateQueries({ queryKey: ['hospital-requisitions'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       if (variables.action === 'ACCEPT') {
         toast.success('Requisition accepted and units allocated to hospital!');
@@ -633,61 +305,15 @@ export const useProcessRequisition = () => {
 };
 
 // ---------------------------------------------------------------------------
-// 4. Appointments Hooks with Resilient Fallback
+// 4. Appointments Hooks
 // ---------------------------------------------------------------------------
-const APPOINTMENTS_STORAGE_KEY = 'll_scheduled_appointments';
-
-const getStoredAppointments = (): AppointmentItem[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(APPOINTMENTS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-const storeAppointmentLocally = (appt: AppointmentItem) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const list = getStoredAppointments().filter((a) => a.id !== appt.id);
-    list.unshift(appt);
-    localStorage.setItem(APPOINTMENTS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-};
-
-const updateStoredAppointmentStatus = (id: string, status: 'COMPLETED' | 'CANCELLED') => {
-  if (typeof window === 'undefined') return;
-  try {
-    const list = getStoredAppointments().map((a) => (a.id === id ? { ...a, status } : a));
-    localStorage.setItem(APPOINTMENTS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-};
-
 export const useMyAppointments = () => {
   return useQuery({
     queryKey: ['my-appointments'],
     queryFn: async () => {
-      const stored = getStoredAppointments();
-      try {
-        const res = await apiClient.get('/appointments', { timeout: 4000 });
-        const serverList = (res.data?.data || []) as AppointmentItem[];
-        const combined = [...serverList];
-        for (const item of stored) {
-          if (!combined.some((c) => c.id === item.id)) {
-            combined.push(item);
-          }
-        }
-        return combined;
-      } catch {
-        return stored;
-      }
+      const res = await apiClient.get('/appointments');
+      return (res.data?.data || []) as AppointmentItem[];
     },
-    initialData: () => getStoredAppointments(),
     refetchInterval: 15000,
   });
 };
@@ -702,68 +328,10 @@ export const useBookAppointment = () => {
       timeSlot: string;
       notes?: string;
     }) => {
-      try {
-        const res = await apiClient.post('/appointments', payload, { timeout: 6000 });
-        if (res.data?.data) {
-          storeAppointmentLocally(res.data.data);
-          return res.data;
-        }
-        return res.data;
-      } catch {
-        // Find facility details from directory
-        const facility = FALLBACK_REGISTERED_FACILITIES.find((f) => f.id === payload.facilityId) || {
-          id: payload.facilityId,
-          name: payload.facilityType === 'HOSPITAL' ? 'Apollo Hospital Specialities' : 'City Central Blood Bank',
-          address: 'Bengaluru Facility',
-          phone: '+919876543210',
-          city: 'Bengaluru',
-          latitude: 12.9716,
-          longitude: 77.5946,
-          facilityType: payload.facilityType,
-        };
-
-        const localAppointment: AppointmentItem = {
-          id: `appt-local-${Date.now()}`,
-          donorProfileId: 'local-donor',
-          facilityType: payload.facilityType,
-          hospitalId: payload.facilityType === 'HOSPITAL' ? payload.facilityId : undefined,
-          hospital: payload.facilityType === 'HOSPITAL' ? {
-            id: facility.id,
-            name: facility.name,
-            address: facility.address,
-            phone: facility.phone,
-            city: facility.city,
-            latitude: facility.latitude,
-            longitude: facility.longitude,
-          } : undefined,
-          bloodBankId: payload.facilityType === 'BLOOD_BANK' ? payload.facilityId : undefined,
-          bloodBank: payload.facilityType === 'BLOOD_BANK' ? {
-            id: facility.id,
-            name: facility.name,
-            address: facility.address,
-            phone: facility.phone,
-            city: facility.city,
-            latitude: facility.latitude,
-            longitude: facility.longitude,
-          } : undefined,
-          appointmentDate: payload.appointmentDate,
-          timeSlot: payload.timeSlot,
-          status: 'SCHEDULED',
-          notes: payload.notes,
-          createdAt: new Date().toISOString(),
-        };
-
-        storeAppointmentLocally(localAppointment);
-        return { success: true, data: localAppointment };
-      }
+      const res = await apiClient.post('/appointments', payload);
+      return res.data;
     },
-    onSuccess: (data: any) => {
-      if (data?.data) {
-        queryClient.setQueryData(['my-appointments'], (old: AppointmentItem[] = []) => {
-          const exists = old.some((a) => a.id === data.data.id);
-          return exists ? old : [data.data, ...old];
-        });
-      }
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-appointments'] });
       toast.success('Donation appointment scheduled successfully!');
     },
@@ -780,21 +348,12 @@ export const useUpdateAppointmentStatus = () => {
       appointmentId: string;
       status: 'COMPLETED' | 'CANCELLED';
     }) => {
-      updateStoredAppointmentStatus(payload.appointmentId, payload.status);
-      try {
-        const res = await apiClient.patch(`/appointments/${payload.appointmentId}/status`, {
-          status: payload.status,
-        }, { timeout: 5000 });
-        return res.data;
-      } catch {
-        return { success: true, message: `Appointment marked as ${payload.status}` };
-      }
+      const res = await apiClient.patch(`/appointments/${payload.appointmentId}/status`, {
+        status: payload.status,
+      });
+      return res.data;
     },
     onSuccess: (_data, variables) => {
-      updateStoredAppointmentStatus(variables.appointmentId, variables.status);
-      queryClient.setQueryData(['my-appointments'], (old: AppointmentItem[] = []) => {
-        return old.map((a) => (a.id === variables.appointmentId ? { ...a, status: variables.status } : a));
-      });
       queryClient.invalidateQueries({ queryKey: ['my-appointments'] });
       if (variables.status === 'COMPLETED') {
         toast.success('Donation completed! Record and certificate updated.');
@@ -815,16 +374,11 @@ export const useActiveDonorsForFacility = (radiusKm: number = 100, bloodGroup?: 
   return useQuery({
     queryKey: ['facility-active-donors', radiusKm, bloodGroup],
     queryFn: async () => {
-      try {
-        const params: any = { radius: radiusKm };
-        if (bloodGroup) params.bloodGroup = bloodGroup;
-        const res = await apiClient.get('/facilities/active-donors', { params, timeout: 3500 });
-        return (res.data?.data?.donors || []) as ActiveDonorItem[];
-      } catch {
-        return [] as ActiveDonorItem[];
-      }
+      const params: any = { radius: radiusKm };
+      if (bloodGroup) params.bloodGroup = bloodGroup;
+      const res = await apiClient.get('/facilities/active-donors', { params });
+      return (res.data?.data?.donors || []) as ActiveDonorItem[];
     },
-    initialData: () => [] as ActiveDonorItem[],
     refetchInterval: 20000,
   });
 };
@@ -836,14 +390,9 @@ export const useDonorEmergencyAlerts = () => {
   return useQuery({
     queryKey: ['donor-emergency-alerts'],
     queryFn: async () => {
-      try {
-        const res = await apiClient.get('/requests/donor-emergency-alerts', { timeout: 3500 });
-        return (res.data?.data || []) as DonorEmergencyAlert[];
-      } catch {
-        return [] as DonorEmergencyAlert[];
-      }
+      const res = await apiClient.get('/requests/donor-emergency-alerts');
+      return (res.data?.data || []) as DonorEmergencyAlert[];
     },
-    initialData: () => [] as DonorEmergencyAlert[],
     refetchInterval: 10000,
   });
 };

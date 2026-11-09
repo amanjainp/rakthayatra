@@ -71,7 +71,7 @@ export const useDonorDashboardData = (userId?: string) => {
     queryFn: async () => {
       try {
         const statsRes = userId
-          ? await apiClient.get(`/donations/donor/${userId}/stats`, { timeout: 3500 }).catch(() => null)
+          ? await apiClient.get(`/donations/donor/${userId}/stats`).catch(() => null)
           : null;
 
         const stats = statsRes?.data?.data || { totalDonations: 0, lastDonationDate: null, isEligibleToDonate: true, nextEligibleDate: null };
@@ -81,7 +81,7 @@ export const useDonorDashboardData = (userId?: string) => {
         let matchingRequestsCount = 0;
         let isAvailable = true;
         try {
-          const userRes = await apiClient.get('/auth/me', { timeout: 3500 }).catch(() => null);
+          const userRes = await apiClient.get('/auth/me').catch(() => null);
           const donorProfile = userRes?.data?.data?.user?.donorProfile;
           isAvailable = donorProfile ? donorProfile.isAvailable !== false : true;
 
@@ -92,8 +92,7 @@ export const useDonorDashboardData = (userId?: string) => {
                 longitude: donorProfile.longitude,
                 radius: 50,
               },
-              timeout: 3500,
-            }).catch(() => null);
+            });
             const markers = mapRes?.data?.data || [];
             matchingRequestsCount = markers.filter((m: any) => m.type === 'EMERGENCY_REQUEST').length;
           }
@@ -105,7 +104,7 @@ export const useDonorDashboardData = (userId?: string) => {
         let activities: RecentActivity[] = [];
         try {
           const historyRes = userId
-            ? await apiClient.get(`/donations/donor/${userId}`, { timeout: 3500 }).catch(() => null)
+            ? await apiClient.get(`/donations/donor/${userId}`).catch(() => null)
             : null;
           const history = historyRes?.data?.data?.items || historyRes?.data?.data || [];
           

@@ -594,44 +594,17 @@ export class BloodRequestService {
       throw new BadRequestError('Units required must be greater than zero.');
     }
 
-    let hospital = await prisma.hospitalProfile.findUnique({
+    const hospital = await prisma.hospitalProfile.findUnique({
       where: { userId: hospitalUserId },
     });
-
-    if (!hospital || hospitalUserId === 'demo-hospital-user') {
-      hospital = await prisma.hospitalProfile.findFirst({
-        where: { isVerified: true },
-      }) || await prisma.hospitalProfile.findFirst();
-    }
-
     if (!hospital) {
       throw new BadRequestError('Hospital profile not found for this account.');
     }
 
-    let bloodBank = null;
-    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-      data.targetBloodBankId
-    );
-
-    if (isUuid) {
-      bloodBank = await prisma.bloodBankProfile.findUnique({
-        where: { id: data.targetBloodBankId },
-        include: { user: true },
-      });
-    }
-
-    if (!bloodBank) {
-      bloodBank = await prisma.bloodBankProfile.findFirst({
-        where: {
-          OR: [
-            { name: { contains: 'City Central', mode: 'insensitive' } },
-            { isVerified: true },
-          ],
-        },
-        include: { user: true },
-      }) || await prisma.bloodBankProfile.findFirst({ include: { user: true } });
-    }
-
+    const bloodBank = await prisma.bloodBankProfile.findUnique({
+      where: { id: data.targetBloodBankId },
+      include: { user: true },
+    });
     if (!bloodBank) {
       throw new NotFoundError('Target blood bank not found.');
     }
@@ -642,7 +615,7 @@ export class BloodRequestService {
 
     const requisition = await prisma.bloodRequest.create({
       data: {
-        requesterId: hospital.userId || hospitalUserId,
+        requesterId: hospitalUserId,
         bloodGroup: data.bloodGroup,
         unitsRequired: data.unitsRequired,
         urgency,
@@ -659,21 +632,15 @@ export class BloodRequestService {
       },
     });
 
-    // Safely create real in-app notification for the target blood bank
-    try {
-      if (bloodBank.userId) {
-        await prisma.notification.create({
-          data: {
-            userId: bloodBank.userId,
-            title: `[REQUISITION] New Requisition from ${hospital.name}`,
-            message: `${hospital.name} has requested ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')} (${urgency}). Requisition #${requisition.id.slice(0, 8)}.`,
-            type: 'EMERGENCY_ALERT',
-          },
-        });
-      }
-    } catch (notifErr: any) {
-      logger.warn(`[Requisition] Could not create notification: ${notifErr?.message}`);
-    }
+    // Create real in-app notification for the target blood bank
+    await prisma.notification.create({
+      data: {
+        userId: bloodBank.userId,
+        title: `[REQUISITION] New Requisition from ${hospital.name}`,
+        message: `${hospital.name} has requested ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')} (${urgency}). Requisition #${requisition.id.slice(0, 8)}.`,
+        type: 'EMERGENCY_ALERT',
+      },
+    });
 
     logger.info(`[Requisition] Created ticket ${requisition.id} from ${hospital.name} to ${bloodBank.name}`);
     return requisition;
@@ -687,14 +654,9 @@ export class BloodRequestService {
     allocatedUnits?: number;
     responseNotes?: string;
   }) {
-    let bloodBank = await prisma.bloodBankProfile.findUnique({
+    const bloodBank = await prisma.bloodBankProfile.findUnique({
       where: { userId: bloodBankUserId },
     });
-    if (!bloodBank) {
-      bloodBank = await prisma.bloodBankProfile.findFirst({
-        where: { isVerified: true },
-      }) || await prisma.bloodBankProfile.findFirst();
-    }
     if (!bloodBank) {
       throw new BadRequestError('Blood bank profile not found for this account.');
     }
@@ -708,7 +670,7 @@ export class BloodRequestService {
     }
 
     if (request.targetBloodBankId && request.targetBloodBankId !== bloodBank.id) {
-      logger.warn(`[ProcessRequisition] Requisition ${requestId} target mismatch, proceeding with accepting bank ${bloodBank.id}`);
+      throw new BadRequestError('This requisition is assigned to a different blood bank.');
     }
 
     if (response.action === 'ACCEPT') {
@@ -729,19 +691,15 @@ export class BloodRequestService {
         },
       });
 
-      // Safely send real in-app notification to the Hospital user
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: request.requesterId,
-            title: `[ACCEPTED] Requisition #${requestId.slice(0, 8)} Accepted by ${bloodBank.name}`,
-            message: `${bloodBank.name} has allocated ${allocatedUnits} units of ${request.bloodGroup.replace('_', '+')}. Note: ${response.responseNotes || 'Ready for collection.'}`,
-            type: 'REQUEST_UPDATE',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`[ProcessRequisition] Could not create accepted notification: ${notifErr?.message}`);
-      }
+      // Send real in-app notification to the Hospital user
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `[ACCEPTED] Requisition #${requestId.slice(0, 8)} Accepted by ${bloodBank.name}`,
+          message: `${bloodBank.name} has allocated ${allocatedUnits} units of ${request.bloodGroup.replace('_', '+')}. Note: ${response.responseNotes || 'Ready for collection.'}`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
 
       return updated;
     } else {
@@ -754,19 +712,15 @@ export class BloodRequestService {
         },
       });
 
-      // Safely send real in-app notification to the Hospital user
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: request.requesterId,
-            title: `[DECLINED] Requisition #${requestId.slice(0, 8)} Declined by ${bloodBank.name}`,
-            message: `${bloodBank.name} was unable to fulfill your request for ${request.bloodGroup.replace('_', '+')}. Reason: ${response.responseNotes || 'Out of stock'}. Consider broadcasting an emergency alert to active donors.`,
-            type: 'REQUEST_UPDATE',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`[ProcessRequisition] Could not create declined notification: ${notifErr?.message}`);
-      }
+      // Send real in-app notification to the Hospital user
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `[DECLINED] Requisition #${requestId.slice(0, 8)} Declined by ${bloodBank.name}`,
+          message: `${bloodBank.name} was unable to fulfill your request for ${request.bloodGroup.replace('_', '+')}. Reason: ${response.responseNotes || 'Out of stock'}. Consider broadcasting an emergency alert to active donors.`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
 
       return updated;
     }
@@ -781,14 +735,9 @@ export class BloodRequestService {
     radiusKm: number;
     message?: string;
   }) {
-    let hospital = await prisma.hospitalProfile.findUnique({
+    const hospital = await prisma.hospitalProfile.findUnique({
       where: { userId: hospitalUserId },
     });
-    if (!hospital || hospitalUserId === 'demo-hospital-user') {
-      hospital = await prisma.hospitalProfile.findFirst({
-        where: { isVerified: true },
-      }) || await prisma.hospitalProfile.findFirst();
-    }
     if (!hospital) {
       throw new BadRequestError('Hospital profile not found.');
     }
@@ -800,7 +749,7 @@ export class BloodRequestService {
     // 1. Create emergency BloodRequest record
     const request = await prisma.bloodRequest.create({
       data: {
-        requesterId: hospital.userId || hospitalUserId,
+        requesterId: hospitalUserId,
         bloodGroup: data.bloodGroup,
         unitsRequired: data.unitsRequired,
         urgency: RequestUrgency.EMERGENCY,
@@ -843,19 +792,15 @@ export class BloodRequestService {
           distanceKm: parseFloat(distance.toFixed(1)),
         });
 
-        // Safely create persistent in-app notification for the donor
-        try {
-          await prisma.notification.create({
-            data: {
-              userId: donor.userId,
-              title: `[EMERGENCY] Blood Urgently Needed at ${hospital.name}`,
-              message: `${hospital.name} (${distance.toFixed(1)} km away) urgently requires ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')}. Please open your dashboard to respond!`,
-              type: 'EMERGENCY_ALERT',
-            },
-          });
-        } catch (notifErr: any) {
-          logger.warn(`[EmergencyBroadcast] Donor notification skipped: ${notifErr?.message}`);
-        }
+        // Create persistent in-app notification for the donor
+        await prisma.notification.create({
+          data: {
+            userId: donor.userId,
+            title: `[EMERGENCY] Blood Urgently Needed at ${hospital.name}`,
+            message: `${hospital.name} (${distance.toFixed(1)} km away) urgently requires ${data.unitsRequired} units of ${data.bloodGroup.replace('_', '+')}. Please open your dashboard to respond!`,
+            type: 'EMERGENCY_ALERT',
+          },
+        });
       }
     }
 
@@ -871,14 +816,9 @@ export class BloodRequestService {
    * Donor accepts or declines an emergency blood request.
    */
   async respondToEmergencyAlert(donorUserId: string, requestId: string, response: { action: 'ACCEPT' | 'DECLINE' }) {
-    let donor = await prisma.donorProfile.findUnique({
+    const donor = await prisma.donorProfile.findUnique({
       where: { userId: donorUserId },
     });
-    if (!donor) {
-      donor = await prisma.donorProfile.findFirst({
-        where: { deletedAt: null },
-      });
-    }
     if (!donor) {
       throw new BadRequestError('Donor profile not found.');
     }
@@ -904,33 +844,25 @@ export class BloodRequestService {
         },
       });
 
-      // Safely notify the hospital in real time
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: request.requesterId,
-            title: `[DONOR ACCEPTED] Alert: ${donor.fullName}`,
-            message: `Voluntary donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}, Phone: ${donor.phone}) has accepted your emergency request #${requestId.slice(0, 8)} and is coming to donate!`,
-            type: 'REQUEST_UPDATE',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`[DonorRespond] Hospital notification skipped: ${notifErr?.message}`);
-      }
+      // Notify the hospital in real time
+      await prisma.notification.create({
+        data: {
+          userId: request.requesterId,
+          title: `[DONOR ACCEPTED] Alert: ${donor.fullName}`,
+          message: `Voluntary donor ${donor.fullName} (${donor.bloodGroup.replace('_', '+')}, Phone: ${donor.phone}) has accepted your emergency request #${requestId.slice(0, 8)} and is coming to donate!`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
 
-      // Safely confirm to donor
-      try {
-        await prisma.notification.create({
-          data: {
-            userId: donorUserId,
-            title: `Thank You for Answering the Call!`,
-            message: `Your willingness to donate for ${request.locationName} has been communicated to the hospital. Venue: ${request.locationName}.`,
-            type: 'DONATION_REMINDER',
-          },
-        });
-      } catch (notifErr: any) {
-        logger.warn(`[DonorRespond] Donor confirmation notification skipped: ${notifErr?.message}`);
-      }
+      // Confirm to donor
+      await prisma.notification.create({
+        data: {
+          userId: donorUserId,
+          title: `Thank You for Answering the Call!`,
+          message: `Your willingness to donate for ${request.locationName} has been communicated to the hospital. Venue: ${request.locationName}.`,
+          type: 'DONATION_REMINDER',
+        },
+      });
 
       return updated;
     } else {
@@ -942,21 +874,8 @@ export class BloodRequestService {
    * Get all requisitions raised by a hospital.
    */
   async getHospitalRequisitions(hospitalUserId: string) {
-    let targetUserId = hospitalUserId;
-    if (hospitalUserId === 'demo-hospital-user') {
-      const hospital = await prisma.hospitalProfile.findFirst({
-        where: { isVerified: true },
-      });
-      if (hospital) targetUserId = hospital.userId;
-    }
-
     return prisma.bloodRequest.findMany({
-      where: {
-        OR: [
-          { requesterId: targetUserId },
-          { requesterId: hospitalUserId },
-        ],
-      },
+      where: { requesterId: hospitalUserId },
       orderBy: { createdAt: 'desc' },
       include: {
         targetBloodBank: { select: { id: true, name: true, phone: true, address: true, city: true } },
@@ -969,14 +888,9 @@ export class BloodRequestService {
    * Get incoming requisitions targeting a blood bank.
    */
   async getIncomingBloodBankRequisitions(bloodBankUserId: string) {
-    let bank = await prisma.bloodBankProfile.findUnique({
+    const bank = await prisma.bloodBankProfile.findUnique({
       where: { userId: bloodBankUserId },
     });
-    if (!bank) {
-      bank = await prisma.bloodBankProfile.findFirst({
-        where: { isVerified: true },
-      }) || await prisma.bloodBankProfile.findFirst();
-    }
     if (!bank) return [];
 
     return prisma.bloodRequest.findMany({
