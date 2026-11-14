@@ -38,6 +38,9 @@ router.get('/:id/matches', authenticate, requireRoles(['HOSPITAL', 'PATIENT', 'A
 // 6. Get map coordinates (Authenticated users)
 router.get('/map', authenticate, (req, res) => bloodRequestController.getMapLocations(req, res));
 
+// Get map configuration (API keys, active modes)
+router.get('/maps-config', authenticate, (req, res) => bloodRequestController.getMapsConfig(req, res));
+
 // Get human readable address from coords
 router.get('/reverse-geocode', authenticate, (req, res) => bloodRequestController.reverseGeocode(req, res));
 

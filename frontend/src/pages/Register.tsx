@@ -8,6 +8,7 @@ import { registerSchema } from '../utils/validation';
 import { z } from 'zod';
 import AuthLayout from '../layouts/AuthLayout';
 import { Loader } from '../components/Loader';
+import { Navigation, CheckCircle2, MapPin } from 'lucide-react';
 
 type RegisterFormInputs = z.infer<typeof registerSchema>;
 
@@ -17,6 +18,11 @@ export const Register: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
   const [selectedRole, setSelectedRole] = useState<RegisterFormInputs['role']>('DONOR');
+
+  // GPS Geolocation state
+  const [isLocating, setIsLocating] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [isGpsAcquired, setIsGpsAcquired] = useState(false);
 
   const {
     register: formRegister,
@@ -31,6 +37,64 @@ export const Register: React.FC = () => {
       consentGiven: false,
     },
   });
+
+  const handleDetectGpsLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error('Geolocation is not supported by your current browser.');
+      return;
+    }
+
+    if (isLocating) return;
+    setIsLocating(true);
+    toast.loading('Requesting GPS location permission...', { id: 'gps-detect' });
+
+    const onPositionSuccess = (pos: GeolocationPosition) => {
+      setIsLocating(false);
+      const lat = Number(pos.coords.latitude.toFixed(6));
+      const lng = Number(pos.coords.longitude.toFixed(6));
+      const accuracy = Math.round(pos.coords.accuracy);
+
+      setValue('latitude', lat.toString(), { shouldValidate: true });
+      setValue('longitude', lng.toString(), { shouldValidate: true });
+      setGpsAccuracy(accuracy);
+      setIsGpsAcquired(true);
+
+      toast.success(
+        `📍 GPS coordinates acquired: ${lat}, ${lng} (±${accuracy}m accuracy)`,
+        { id: 'gps-detect', duration: 4000 }
+      );
+    };
+
+    const onPositionError = (err: GeolocationPositionError) => {
+      setIsLocating(false);
+      let msg = 'Unable to acquire GPS coordinates.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Location permission denied. Please allow location access in your browser settings to auto-fill GPS coordinates.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'Device location is currently unavailable. Please verify GPS is enabled or enter coordinates manually.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'GPS request timed out. Please click "Use My Current Location" again or enter manually.';
+      }
+      toast.error(msg, { id: 'gps-detect', duration: 5000 });
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      onPositionSuccess,
+      (err) => {
+        // Fallback to standard accuracy if high-accuracy satellite lock times out
+        if (err.code === err.TIMEOUT) {
+          navigator.geolocation.getCurrentPosition(
+            onPositionSuccess,
+            onPositionError,
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+          );
+        } else {
+          onPositionError(err);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
 
   const onSubmit = async (data: RegisterFormInputs) => {
     setIsSubmitting(true);
@@ -109,7 +173,7 @@ export const Register: React.FC = () => {
                 key={r.id}
                 type="button"
                 onClick={() => handleRoleSelect(r.id)}
-                className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 p-4 rounded-2xl text-left transition-all duration-200 group"
+                className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 p-4 rounded-2xl text-left transition-all duration-200 group cursor-pointer"
               >
                 <span className="block text-sm font-bold text-white group-hover:text-rose-500 transition-colors">
                   {r.label}
@@ -141,7 +205,7 @@ export const Register: React.FC = () => {
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="text-xs text-slate-500 hover:text-slate-400 underline font-semibold"
+              className="text-xs text-slate-500 hover:text-slate-400 underline font-semibold cursor-pointer"
             >
               Change Role
             </button>
@@ -219,7 +283,7 @@ export const Register: React.FC = () => {
                   </label>
                   <select
                     {...formRegister('bloodGroup')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer"
                   >
                     <option value="">Select</option>
                     {['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG', 'O_POS', 'O_NEG'].map(g => (
@@ -234,7 +298,7 @@ export const Register: React.FC = () => {
                   <input
                     type="date"
                     {...formRegister('dob')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer"
                   />
                 </div>
               </div>
@@ -257,7 +321,7 @@ export const Register: React.FC = () => {
                   </label>
                   <select
                     {...formRegister('gender')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer"
                   >
                     <option value="Not Specified">Select</option>
                     <option value="MALE">Male</option>
@@ -267,29 +331,71 @@ export const Register: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Latitude
+              {/* Geolocation Section */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-rose-500" />
+                    Geographic Coordinates (GPS)
                   </label>
-                  <input
-                    type="text"
-                    placeholder="28.6139"
-                    {...formRegister('latitude')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
-                  />
+                  <button
+                    type="button"
+                    onClick={handleDetectGpsLocation}
+                    disabled={isLocating}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all cursor-pointer disabled:opacity-50 group shadow-sm"
+                    title="Request GPS permission and auto-detect latitude & longitude"
+                  >
+                    {isLocating ? (
+                      <>
+                        <Loader size="sm" color="text-rose-400" />
+                        <span className="animate-pulse">Detecting GPS...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-3 h-3 text-rose-500 group-hover:rotate-45 transition-transform" />
+                        <span>Use My Current Location</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Longitude
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="77.2090"
-                    {...formRegister('longitude')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
-                  />
+
+                {isGpsAcquired && (
+                  <div className="flex items-center justify-between text-[10px] text-emerald-400 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1 rounded-lg">
+                    <span className="flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      Live GPS fix acquired {gpsAccuracy ? `(±${gpsAccuracy}m)` : ''}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">Auto-Filled</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Latitude
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="28.6139"
+                      {...formRegister('latitude')}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Longitude
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="77.2090"
+                      {...formRegister('longitude')}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all font-mono"
+                    />
+                  </div>
                 </div>
+                <p className="text-[10px] text-slate-500">
+                  Used strictly for calculating distance to emergency blood SOS requests within your radius under DPDP rules.
+                </p>
               </div>
 
               {/* DPDP Consent */}
@@ -363,30 +469,70 @@ export const Register: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Latitude
+              {/* Geolocation Section */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-rose-500" />
+                    Facility Coordinates (GPS)
                   </label>
-                  <input
-                    type="text"
-                    placeholder="28.6139"
-                    {...formRegister('latitude')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
-                  />
+                  <button
+                    type="button"
+                    onClick={handleDetectGpsLocation}
+                    disabled={isLocating}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all cursor-pointer disabled:opacity-50 group shadow-sm"
+                    title="Request GPS permission and auto-detect facility location"
+                  >
+                    {isLocating ? (
+                      <>
+                        <Loader size="sm" color="text-rose-400" />
+                        <span className="animate-pulse">Detecting GPS...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-3 h-3 text-rose-500 group-hover:rotate-45 transition-transform" />
+                        <span>Use My Current Location</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Longitude
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="77.2090"
-                    {...formRegister('longitude')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
-                  />
+
+                {isGpsAcquired && (
+                  <div className="flex items-center justify-between text-[10px] text-emerald-400 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1 rounded-lg">
+                    <span className="flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      Live GPS fix acquired {gpsAccuracy ? `(±${gpsAccuracy}m)` : ''}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">Auto-Filled</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Latitude
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="28.6139"
+                      {...formRegister('latitude')}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Longitude
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="77.2090"
+                      {...formRegister('longitude')}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all font-mono"
+                    />
+                  </div>
                 </div>
               </div>
+
               {errors.licenseNumber && (
                 <p className="text-[10px] font-semibold text-rose-500">{errors.licenseNumber.message}</p>
               )}
@@ -397,7 +543,7 @@ export const Register: React.FC = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full h-11 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-lg shadow-rose-600/20 flex items-center justify-center disabled:opacity-50"
+            className="w-full h-11 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-lg shadow-rose-600/20 flex items-center justify-center disabled:opacity-50 cursor-pointer"
           >
             {isSubmitting ? <Loader size="sm" color="text-white" /> : 'Register Account'}
           </button>

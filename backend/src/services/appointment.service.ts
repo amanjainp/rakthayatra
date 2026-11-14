@@ -58,6 +58,7 @@ export class AppointmentService {
           fullName: 'Aman Jain P',
           bloodGroup: 'O_NEG',
           gender: 'Male',
+          dob: new Date('2000-01-01'),
           phone: '+919876543210',
           address: 'Yeshwanthpur, Bengaluru',
           latitude: 13.0235,
@@ -67,6 +68,10 @@ export class AppointmentService {
         },
         include: { eligibility: true, user: true },
       });
+    }
+
+    if (!donor) {
+      throw new Error('Donor profile could not be initialized.');
     }
 
     // 2. Eligibility check: check medical eligibility and 90-day cooldown

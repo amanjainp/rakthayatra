@@ -5,16 +5,24 @@ interface AuthLayoutProps {
   children: React.ReactNode;
   title: string;
   subtitle?: string;
+  belowCard?: React.ReactNode;
+  maxWidth?: string;
 }
 
-export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, title, subtitle }) => {
+export const AuthLayout: React.FC<AuthLayoutProps> = ({
+  children,
+  title,
+  subtitle,
+  belowCard,
+  maxWidth = 'max-w-md',
+}) => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans">
       {/* Premium glowing red blur accents */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-rose-900/10 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-rose-600/5 rounded-full blur-[100px] pointer-events-none"></div>
 
-      <div className="w-full max-w-md space-y-8 relative z-10">
+      <div className={`w-full ${maxWidth} space-y-6 relative z-10`}>
         {/* Branding header */}
         <div className="flex flex-col items-center space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-rose-600 to-rose-400 flex items-center justify-center shadow-xl shadow-rose-500/20 animate-pulse">
@@ -38,6 +46,9 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, title, subtitl
           </div>
           {children}
         </div>
+
+        {/* Below Card Optional Section */}
+        {belowCard}
       </div>
     </div>
   );

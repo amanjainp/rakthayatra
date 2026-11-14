@@ -34,8 +34,8 @@ const normalizeApiUrl = (url: string): string => {
     trimmed = `https://${strippedHost}.onrender.com`;
   }
 
-  // 3. Ensure protocol
-  if (!/^https?:\/\//i.test(trimmed)) {
+  // 3. Ensure protocol for absolute URLs
+  if (!trimmed.startsWith('/') && !/^https?:\/\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
 

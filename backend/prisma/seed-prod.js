@@ -229,6 +229,29 @@ async function main() {
     }
   }
 
+  // 8. Seed Sample Emergency Request if none exist
+  const existingRequestCount = await prisma.bloodRequest.count();
+  if (existingRequestCount === 0) {
+    const adminUser = await prisma.user.findFirst({ where: { email: 'admin@lifelink.org' } });
+    if (adminUser) {
+      await prisma.bloodRequest.create({
+        data: {
+          requesterId: adminUser.id,
+          bloodGroup: BloodGroup ? BloodGroup.O_NEG : 'O_NEG',
+          unitsRequired: 3,
+          urgency: 'EMERGENCY',
+          status: 'PENDING',
+          locationName: 'Victoria Hospital Emergency Trauma Ward',
+          latitude: 12.9645,
+          longitude: 77.5755,
+          message: 'Immediate O-Negative blood needed for emergency trauma patient.',
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        },
+      });
+      console.log('[Seed-Prod] Seeded initial emergency blood request.');
+    }
+  }
+
   console.log('[Seed-Prod] Production database initialization finished successfully.');
 }
 

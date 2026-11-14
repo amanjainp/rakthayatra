@@ -13,6 +13,8 @@ import {
   Phone,
   Send,
   Trash2,
+  Calendar,
+  UserCheck,
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -23,6 +25,8 @@ import {
   useEmergencyBroadcast,
   useRegisteredFacilities,
   useActiveDonorsForFacility,
+  useMyAppointments,
+  useUpdateAppointmentStatus,
   HospitalRequisition,
 } from '../../hooks/useRealtimeLogistics';
 
@@ -31,9 +35,18 @@ export const HospitalDashboard: React.FC = () => {
   // Real database hooks
   const { data: requisitions = [], isLoading: isReqLoading } = useHospitalRequisitions();
   const { data: bloodBanks = [] } = useRegisteredFacilities('BLOOD_BANK');
+  const { data: appointments = [], isLoading: isLoadingAppointments } = useMyAppointments();
   const createRequisition = useCreateHospitalRequisition();
   const deleteRequisition = useDeleteHospitalRequisition();
   const emergencyBroadcast = useEmergencyBroadcast();
+  const updateAppointmentMutation = useUpdateAppointmentStatus();
+
+  const handleCompleteAppointment = async (appointmentId: string) => {
+    await updateAppointmentMutation.mutateAsync({
+      appointmentId,
+      status: 'COMPLETED',
+    });
+  };
 
   // Modals state
   const [isRequisitionOpen, setIsRequisitionOpen] = useState(false);
@@ -310,6 +323,99 @@ export const HospitalDashboard: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Scheduled Voluntary Donor Appointments at Hospital */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-500" />
+              Scheduled Voluntary Donor Appointments
+            </h3>
+            <p className="text-xs text-slate-400">
+              Donors who scheduled a voluntary donation slot at this hospital
+            </p>
+          </div>
+          <span className="text-xs text-slate-400">
+            {appointments.filter((a) => a.status === 'SCHEDULED').length} upcoming slots
+          </span>
+        </div>
+
+        {isLoadingAppointments ? (
+          <div className="p-8 text-center text-xs text-slate-500">Loading appointments...</div>
+        ) : appointments.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-slate-800 bg-slate-900/30 text-center space-y-2">
+            <UserCheck className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Scheduled Appointments</p>
+            <p className="text-xs text-slate-500">When donors book a slot at this hospital, it will appear here in real time.</p>
+          </div>
+        ) : (
+          <div className="border border-slate-800/80 rounded-2xl bg-slate-900/40 backdrop-blur-xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4">Donor Name</th>
+                    <th className="py-3 px-4">Blood Group</th>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Date & Time Slot</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {appointments.map((apt) => (
+                    <tr key={apt.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="py-3 px-4 font-bold text-white">
+                        {apt.donor?.fullName || 'Aman Jain P'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 font-bold border border-rose-500/20">
+                          {apt.donor?.bloodGroup || 'O-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 font-mono">
+                        {apt.donor?.phone || '+919876543210'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-slate-200 font-semibold">{apt.appointmentDate}</div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {apt.timeSlot}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            apt.status === 'COMPLETED'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : apt.status === 'CANCELLED'
+                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}
+                        >
+                          {apt.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {apt.status === 'SCHEDULED' && (
+                          <button
+                            type="button"
+                            onClick={() => handleCompleteAppointment(apt.id)}
+                            disabled={updateAppointmentMutation.isPending}
+                            className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors inline-flex items-center gap-1 shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark Donated
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
