@@ -145,16 +145,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async (): Promise<void> => {
-    setIsLoading(true);
-    try {
-      // Logout in backend (revokes token)
-      await apiClient.post('/auth/logout');
-    } catch (err) {
-      // Continue even if network call fails
-    } finally {
-      handleLogoutLocal();
-      setIsLoading(false);
-    }
+    // 1. Immediately wipe local auth credentials (0 ms latency, instant UI transition)
+    handleLogoutLocal();
+    setIsLoading(false);
+
+    // 2. Dispatch server token revocation asynchronously in the background (non-blocking)
+    apiClient.post('/auth/logout').catch(() => {
+      // Ignore background revocation failure
+    });
   };
 
   return (

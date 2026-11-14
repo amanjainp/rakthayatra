@@ -29,9 +29,9 @@ export const DashboardLayout: React.FC = () => {
   const { data: notifications = [], unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const recentNotifs = notifications.slice(0, 3);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
   };
 
   // Helper to determine active route styles

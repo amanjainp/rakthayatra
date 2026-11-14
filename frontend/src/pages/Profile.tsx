@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { User, Shield, Lock, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -8,6 +9,7 @@ import toast from 'react-hot-toast';
 
 export const Profile: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const { register: regProfile, handleSubmit: handleProfile } = useForm({
     defaultValues: {
@@ -44,6 +46,7 @@ export const Profile: React.FC = () => {
     if (confirm) {
       toast.success('Data deletion sweep initiated successfully');
       logout();
+      navigate('/login', { replace: true });
     }
   };
 

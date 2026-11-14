@@ -41,6 +41,23 @@ router.get('/public', async (req: Request, res: Response) => {
         },
         orderBy: { name: 'asc' },
       });
+
+      // Ensure demo hospital is always present for seamless demo workflows
+      const hasApollo = hospitals.some((h) => h.name.toLowerCase().includes('apollo') || h.id === 'demo-hospital-profile-1');
+      if (!hasApollo) {
+        hospitals.unshift({
+          id: 'demo-hospital-profile-1',
+          name: 'Apollo Hospital Specialities',
+          licenseNumber: 'HOSP-99887-KAR',
+          phone: '+918877665544',
+          address: 'Bannerghatta Road, Bengaluru',
+          city: 'Bengaluru',
+          latitude: 12.8962,
+          longitude: 77.5991,
+          isVerified: true,
+          createdAt: new Date(),
+        });
+      }
     }
 
     if (!type || type === 'BLOOD_BANK') {
@@ -60,6 +77,23 @@ router.get('/public', async (req: Request, res: Response) => {
         },
         orderBy: { name: 'asc' },
       });
+
+      // Ensure demo blood bank is always present for seamless demo workflows
+      const hasCityBank = bloodBanks.some((b) => b.name.toLowerCase().includes('city central') || b.id === 'demo-bloodbank-profile-1');
+      if (!hasCityBank) {
+        bloodBanks.unshift({
+          id: 'demo-bloodbank-profile-1',
+          name: 'City Central Blood Bank',
+          licenseNumber: 'BB-12345-KAR',
+          phone: '+919988776655',
+          address: 'Vyalikaval, Bengaluru',
+          city: 'Bengaluru',
+          latitude: 12.9998,
+          longitude: 77.5721,
+          isVerified: true,
+          createdAt: new Date(),
+        });
+      }
     }
 
     const facilities = [

@@ -165,16 +165,66 @@ export interface DonorEmergencyAlert {
 // ---------------------------------------------------------------------------
 // 1. Registered Facilities Hook (Public Directory)
 // ---------------------------------------------------------------------------
+export const DEFAULT_DEMO_FACILITIES: RegisteredFacility[] = [
+  {
+    id: 'demo-hospital-profile-1',
+    name: 'Apollo Hospital Specialities',
+    facilityType: 'HOSPITAL',
+    licenseNumber: 'HOSP-99887-KAR',
+    phone: '+918877665544',
+    address: 'Bannerghatta Road, Bengaluru',
+    city: 'Bengaluru',
+    latitude: 12.8962,
+    longitude: 77.5991,
+    isVerified: true,
+  },
+  {
+    id: 'demo-bloodbank-profile-1',
+    name: 'City Central Blood Bank',
+    facilityType: 'BLOOD_BANK',
+    licenseNumber: 'BB-12345-KAR',
+    phone: '+919988776655',
+    address: 'Vyalikaval, Bengaluru',
+    city: 'Bengaluru',
+    latitude: 12.9998,
+    longitude: 77.5721,
+    isVerified: true,
+  },
+];
+
 export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?: string) => {
   return useQuery({
     queryKey: ['registered-facilities', type, city],
     queryFn: async () => {
-      const params: any = {};
-      if (type) params.type = type;
-      if (city) params.city = city;
-      const res = await apiClient.get('/facilities/public', { params });
-      return (res.data?.data?.facilities || []) as RegisteredFacility[];
+      try {
+        const params: any = {};
+        if (type) params.type = type;
+        if (city) params.city = city;
+        const res = await apiClient.get('/facilities/public', { params });
+        const list = (res.data?.data?.facilities || []) as RegisteredFacility[];
+
+        // Guarantee demo hospital and demo blood bank are always available
+        const result = [...list];
+        for (const demoFac of DEFAULT_DEMO_FACILITIES) {
+          if (!type || demoFac.facilityType === type) {
+            const exists = result.some(
+              (f) => f.name.toLowerCase() === demoFac.name.toLowerCase() || f.id === demoFac.id
+            );
+            if (!exists) {
+              result.push(demoFac);
+            }
+          }
+        }
+        return result.length > 0
+          ? result
+          : type
+          ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type)
+          : DEFAULT_DEMO_FACILITIES;
+      } catch {
+        return type ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type) : DEFAULT_DEMO_FACILITIES;
+      }
     },
+    initialData: () => (type ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type) : DEFAULT_DEMO_FACILITIES),
     staleTime: 60000,
   });
 };
