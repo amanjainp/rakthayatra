@@ -148,15 +148,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Do not force logout for demo users while backend is waking up
         return;
       }
-      const response = await apiClient.get('/auth/me');
+      const response = await apiClient.get('/auth/me', { timeout: 6000 });
       if (response.data?.success && response.data?.data?.user) {
         const userData = response.data.data.user;
         setUserAndStore(userData);
       }
-    } catch (err) {
-      const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-      if (!storedToken || !storedToken.startsWith('demo-token-')) {
-        handleLogoutLocal();
+    } catch (err: any) {
+      // Only logout if token is explicitly revoked/invalidated with 401
+      if (err.response?.status === 401) {
+        const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+        if (!storedToken || !storedToken.startsWith('demo-token-')) {
+          handleLogoutLocal();
+        }
       }
     }
   };
@@ -175,6 +178,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setUser(demo.user);
     setToken(demo.token);
+    setIsLoading(false);
     localStorage.setItem(ACCESS_TOKEN_KEY, demo.token);
     localStorage.setItem(USER_KEY, JSON.stringify(demo.user));
 
@@ -210,11 +214,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(formatUserObject(JSON.parse(storedUser)));
+        // Instantly unblock page rendering without waiting on network roundtrip
+        setIsLoading(false);
         
-        // Asynchronously check/update user state in background
-        refreshUser().finally(() => {
-          setIsLoading(false);
-        });
+        // Asynchronously check/update user state in background with safe timeout
+        refreshUser().catch(() => {});
       } else {
         setIsLoading(false);
       }

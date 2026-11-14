@@ -191,9 +191,37 @@ export const DEFAULT_DEMO_FACILITIES: RegisteredFacility[] = [
     longitude: 77.5721,
     isVerified: true,
   },
+  {
+    id: 'demo-hospital-profile-2',
+    name: 'Manipal Hospital & Trauma Center',
+    facilityType: 'HOSPITAL',
+    licenseNumber: 'HOSP-44552-KAR',
+    phone: '+918025024444',
+    address: 'HAL Old Airport Road, Bengaluru',
+    city: 'Bengaluru',
+    latitude: 12.9592,
+    longitude: 77.6534,
+    isVerified: true,
+  },
+  {
+    id: 'demo-bloodbank-profile-2',
+    name: 'Red Cross Voluntary Blood Centre',
+    facilityType: 'BLOOD_BANK',
+    licenseNumber: 'BB-77881-KAR',
+    phone: '+918022268435',
+    address: 'Race Course Road, Bengaluru',
+    city: 'Bengaluru',
+    latitude: 12.9833,
+    longitude: 77.5833,
+    isVerified: true,
+  },
 ];
 
 export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?: string) => {
+  const fallback = type
+    ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type)
+    : DEFAULT_DEMO_FACILITIES;
+
   return useQuery({
     queryKey: ['registered-facilities', type, city],
     queryFn: async () => {
@@ -201,7 +229,7 @@ export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?:
         const params: any = {};
         if (type) params.type = type;
         if (city) params.city = city;
-        const res = await apiClient.get('/facilities/public', { params });
+        const res = await apiClient.get('/facilities/public', { params, timeout: 5000 });
         const list = (res.data?.data?.facilities || []) as RegisteredFacility[];
 
         // Guarantee demo hospital and demo blood bank are always available
@@ -216,16 +244,12 @@ export const useRegisteredFacilities = (type?: 'HOSPITAL' | 'BLOOD_BANK', city?:
             }
           }
         }
-        return result.length > 0
-          ? result
-          : type
-          ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type)
-          : DEFAULT_DEMO_FACILITIES;
+        return result.length > 0 ? result : fallback;
       } catch {
-        return type ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type) : DEFAULT_DEMO_FACILITIES;
+        return fallback;
       }
     },
-    initialData: () => (type ? DEFAULT_DEMO_FACILITIES.filter((f) => f.facilityType === type) : DEFAULT_DEMO_FACILITIES),
+    initialData: () => fallback,
     staleTime: 60000,
   });
 };

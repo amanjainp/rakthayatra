@@ -34,6 +34,7 @@ import {
   useRespondEmergencyAlert,
   useRegisteredFacilities,
   useUpdateDonorAvailability,
+  DEFAULT_DEMO_FACILITIES,
 } from '../../hooks/useRealtimeLogistics';
 
 export const DonorDashboard: React.FC = () => {
@@ -75,6 +76,7 @@ export const DonorDashboard: React.FC = () => {
   const { data: emergencyAlerts = [], isLoading: isLoadingAlerts } = useDonorEmergencyAlerts();
   const respondEmergencyMutation = useRespondEmergencyAlert();
   const { data: facilities = [], isLoading: isLoadingFacilities } = useRegisteredFacilities();
+  const activeFacilities = facilities.length > 0 ? facilities : DEFAULT_DEMO_FACILITIES;
   const updateAvailabilityMutation = useUpdateDonorAvailability();
 
   const { data, isLoading } = useDonorDashboardData(user?.id);
@@ -165,7 +167,7 @@ export const DonorDashboard: React.FC = () => {
       return;
     }
 
-    const facility = facilities.find((f) => f.id === selectedFacilityId);
+    const facility = activeFacilities.find((f) => f.id === selectedFacilityId);
     if (!facility) {
       toast.error('Selected facility could not be found.');
       return;
@@ -618,15 +620,15 @@ Generated on: ${new Date().toLocaleDateString()}
             </p>
           </div>
           <span className="text-xs text-slate-400 font-semibold">
-            {facilities.length} Verified Facilities Active
+            {activeFacilities.length} Verified Facilities Active
           </span>
         </div>
 
-        {isLoadingFacilities ? (
+        {isLoadingFacilities && activeFacilities.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500">Loading registered facilities directory...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {facilities.map((fac) => (
+            {activeFacilities.map((fac) => (
               <div
                 key={fac.id}
                 className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-xl shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition-all group"
@@ -816,7 +818,7 @@ Generated on: ${new Date().toLocaleDateString()}
               required
             >
               <option value="">-- Choose a Hospital or Blood Bank --</option>
-              {facilities.map((fac) => (
+              {activeFacilities.map((fac) => (
                 <option key={fac.id} value={fac.id}>
                   {fac.name} ({fac.facilityType === 'BLOOD_BANK' ? 'Blood Bank' : 'Hospital'}) - {fac.city}
                 </option>
@@ -828,7 +830,7 @@ Generated on: ${new Date().toLocaleDateString()}
           <div className="space-y-2">
             <span className="block text-slate-400 font-semibold">Or Click from Facility Directory Below:</span>
             <div className="max-h-44 overflow-y-auto space-y-2 border border-slate-800/80 rounded-xl p-2 bg-slate-950/60">
-              {facilities.map((fac) => (
+              {activeFacilities.map((fac) => (
                 <div
                   key={fac.id}
                   onClick={() => setSelectedFacilityId(fac.id)}

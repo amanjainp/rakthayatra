@@ -29,18 +29,19 @@ export const Inventory: React.FC = () => {
     }
   });
 
-  const onAddSubmit = async (values: any) => {
-    try {
-      await addStock({
-        bloodGroup: values.bloodGroup,
-        units: Number(values.units),
-        expiryDate: new Date(values.expiryDate).toISOString(),
-      });
-      setIsAddOpen(false);
-      reset();
-    } catch {
-      // toast inside hook
-    }
+  const onAddSubmit = (values: any) => {
+    // Instantly close modal and reset form (0 ms latency)
+    setIsAddOpen(false);
+    reset();
+
+    // Dispatch stock registration with instant optimistic update
+    addStock({
+      bloodGroup: values.bloodGroup,
+      units: Number(values.units),
+      expiryDate: new Date(values.expiryDate).toISOString(),
+    }).catch(() => {
+      // Optimistic cache handles offline or background sync
+    });
   };
 
   const handleSweep = async () => {
