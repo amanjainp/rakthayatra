@@ -22,6 +22,8 @@ import {
   Download,
   Printer,
   Copy,
+  XCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
@@ -77,6 +79,34 @@ export const BloodBankDashboard: React.FC = () => {
   const [selectedRequisition, setSelectedRequisition] = useState<IncomingRequisition | null>(null);
   const [allocatedUnits, setAllocatedUnits] = useState<number>(1);
   const [responseNotes, setResponseNotes] = useState<string>('');
+
+  // Incomplete / Did Not Donate state
+  const [incompleteModalOpen, setIncompleteModalOpen] = useState(false);
+  const [selectedAppointmentForIncomplete, setSelectedAppointmentForIncomplete] = useState<any>(null);
+  const [incompleteReason, setIncompleteReason] = useState('Donor Absent / No-Show');
+  const [customReasonNote, setCustomReasonNote] = useState('');
+
+  const handleOpenDidNotDonate = (apt: any) => {
+    setSelectedAppointmentForIncomplete(apt);
+    setIncompleteReason('Donor Absent / No-Show');
+    setCustomReasonNote('');
+    setIncompleteModalOpen(true);
+  };
+
+  const handleConfirmDidNotDonate = async () => {
+    if (!selectedAppointmentForIncomplete) return;
+    const finalReason = customReasonNote.trim()
+      ? `${incompleteReason} - ${customReasonNote.trim()}`
+      : incompleteReason;
+
+    await updateAppointmentMutation.mutateAsync({
+      appointmentId: selectedAppointmentForIncomplete.id,
+      status: 'DID_NOT_DONATE',
+      reason: finalReason,
+    });
+    setIncompleteModalOpen(false);
+    setSelectedAppointmentForIncomplete(null);
+  };
 
   // Blood Units Inventory with detailed cold-chain metadata
   const [inventoryUnits, setInventoryUnits] = useState<BloodUnitItem[]>([
@@ -553,27 +583,47 @@ export const BloodBankDashboard: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            apt.status === 'COMPLETED'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : apt.status === 'CANCELLED'
-                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}
-                        >
-                          {apt.status}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              apt.status === 'COMPLETED'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : apt.status === 'DID_NOT_DONATE' || apt.status === 'CANCELLED'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}
+                          >
+                            {apt.status === 'DID_NOT_DONATE' ? 'DID NOT DONATE' : apt.status}
+                          </span>
+                          {apt.notes && (
+                            <span className="text-[10px] text-slate-400 max-w-[170px] truncate" title={apt.notes}>
+                              {apt.notes.replace('Reason: ', '')}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right">
                         {apt.status === 'SCHEDULED' && (
-                          <button
-                            onClick={() => handleCompleteAppointment(apt.id)}
-                            disabled={updateAppointmentMutation.isPending}
-                            className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors inline-flex items-center gap-1 shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark Donated
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleCompleteAppointment(apt.id)}
+                              disabled={updateAppointmentMutation.isPending}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors inline-flex items-center gap-1 shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+                              title="Mark blood donation as successfully collected"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Mark Donated
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDidNotDonate(apt)}
+                              disabled={updateAppointmentMutation.isPending}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-rose-950/60 hover:border-rose-500/40 border border-slate-700/80 transition-all inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              title="Record that donation did not take place"
+                            >
+                              <XCircle className="w-3.5 h-3.5 text-rose-400" /> Did Not Donate
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1069,6 +1119,109 @@ export const BloodBankDashboard: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Did Not Donate Modal */}
+      <Modal
+        isOpen={incompleteModalOpen}
+        onClose={() => setIncompleteModalOpen(false)}
+        title="Record Incomplete Blood Donation"
+      >
+        <div className="space-y-4 text-xs text-slate-200">
+          <p className="text-slate-400 text-xs">
+            Specify why the blood donation could not take place for{' '}
+            <strong className="text-white">
+              {selectedAppointmentForIncomplete?.donor?.fullName || 'the scheduled donor'}
+            </strong>
+            :
+          </p>
+
+          <div className="space-y-2">
+            {[
+              {
+                id: 'Donor Absent / No-Show',
+                label: 'Donor Absent / No-Show',
+                desc: 'Donor was unable to come or did not arrive for the slot',
+              },
+              {
+                id: 'Facility Staff Shortage',
+                label: 'Facility Staff Shortage',
+                desc: 'Phlebotomy / clinical staff temporarily unavailable to collect blood',
+              },
+              {
+                id: 'Facility Overcrowded',
+                label: 'Facility Overcrowded',
+                desc: 'High donor turnout exceeded safe collection capacity',
+              },
+              {
+                id: 'Medical Screening Deferral',
+                label: 'Medical Screening Deferral',
+                desc: 'Donor deferred due to hemoglobin, vitals, blood pressure, or screening',
+              },
+              {
+                id: 'Cancelled / Other',
+                label: 'Cancelled / Other Circumstance',
+                desc: 'Slot cancelled or alternate reason',
+              },
+            ].map((reason) => (
+              <label
+                key={reason.id}
+                onClick={() => setIncompleteReason(reason.id)}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  incompleteReason === reason.id
+                    ? 'border-rose-500 bg-rose-950/30'
+                    : 'border-slate-800 bg-slate-900/40 hover:border-slate-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="incompleteReason"
+                  checked={incompleteReason === reason.id}
+                  onChange={() => setIncompleteReason(reason.id)}
+                  className="mt-0.5 text-rose-500 focus:ring-0"
+                />
+                <div>
+                  <div className="font-bold text-white text-xs">{reason.label}</div>
+                  <div className="text-[11px] text-slate-400">{reason.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div>
+            <label className="block text-slate-400 font-semibold mb-1">
+              Additional Clinical Notes / Details (Optional):
+            </label>
+            <input
+              type="text"
+              value={customReasonNote}
+              onChange={(e) => setCustomReasonNote(e.target.value)}
+              placeholder="e.g. Advised donor to re-hydrate and visit tomorrow morning..."
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 outline-none text-xs focus:border-rose-500/40"
+            />
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Marking as <strong>Did Not Donate</strong> will not apply a 90-day cooldown to the donor. They remain eligible to reschedule.
+            </span>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" type="button" onClick={() => setIncompleteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              type="button"
+              onClick={handleConfirmDidNotDonate}
+              isLoading={updateAppointmentMutation.isPending}
+            >
+              Confirm "Did Not Donate"
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

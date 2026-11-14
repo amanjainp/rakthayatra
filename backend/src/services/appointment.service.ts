@@ -290,9 +290,14 @@ export class AppointmentService {
   }
 
   /**
-   * Update appointment status (e.g. COMPLETED or CANCELLED)
+   * Update appointment status (COMPLETED, CANCELLED, or DID_NOT_DONATE)
    */
-  async updateStatus(userId: string, appointmentId: string, status: 'COMPLETED' | 'CANCELLED') {
+  async updateStatus(
+    userId: string,
+    appointmentId: string,
+    status: 'COMPLETED' | 'CANCELLED' | 'DID_NOT_DONATE',
+    reason?: string
+  ) {
     const appt = await prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
@@ -306,9 +311,18 @@ export class AppointmentService {
       throw new Error('Appointment not found');
     }
 
+    const updatedNotes = reason
+      ? appt.notes
+        ? `${appt.notes} | Reason: ${reason}`
+        : `Reason: ${reason}`
+      : appt.notes;
+
     const updated = await prisma.appointment.update({
       where: { id: appointmentId },
-      data: { status },
+      data: {
+        status,
+        notes: updatedNotes,
+      },
     });
 
     // If marked completed, update donor's last donation date
@@ -324,6 +338,20 @@ export class AppointmentService {
           userId: appt.donor.userId,
           title: '🎉 Blood Donation Completed!',
           message: `Thank you for saving lives! Your donation has been recorded. Your verified donation certificate is now available in your dashboard.`,
+          type: 'REQUEST_UPDATE',
+        },
+      });
+    } else if (status === 'DID_NOT_DONATE') {
+      // Donation did not take place (e.g. No-show, staff shortage, overcrowding, screening deferral)
+      // Do NOT update donor's last donation date (no 90-day cooldown applied)
+      const facilityTitle = appt.hospital?.name || appt.bloodBank?.name || 'Facility';
+      const reasonSuffix = reason ? ` (${reason})` : '';
+
+      await prisma.notification.create({
+        data: {
+          userId: appt.donor.userId,
+          title: 'ℹ️ Scheduled Blood Donation Concluded',
+          message: `The blood donation at ${facilityTitle} did not occur${reasonSuffix}. No cooldown period applies to your profile. You may book another slot anytime.`,
           type: 'REQUEST_UPDATE',
         },
       });

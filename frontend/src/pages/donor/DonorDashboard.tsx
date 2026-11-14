@@ -574,17 +574,24 @@ Generated on: ${new Date().toLocaleDateString()}
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              apt.status === 'COMPLETED'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : apt.status === 'CANCELLED'
-                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                            }`}
-                          >
-                            {apt.status}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                apt.status === 'COMPLETED'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : apt.status === 'DID_NOT_DONATE' || apt.status === 'CANCELLED'
+                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                  : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              }`}
+                            >
+                              {apt.status === 'DID_NOT_DONATE' ? 'DID NOT DONATE' : apt.status}
+                            </span>
+                            {apt.notes && (
+                              <span className="text-[10px] text-slate-400 max-w-[170px] truncate" title={apt.notes}>
+                                {apt.notes.replace('Reason: ', '')}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4 text-right">
                           {apt.status === 'SCHEDULED' && (

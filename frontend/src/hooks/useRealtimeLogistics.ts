@@ -120,7 +120,7 @@ export interface AppointmentItem {
   };
   appointmentDate: string;
   timeSlot: string;
-  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'DID_NOT_DONATE';
   notes?: string;
   createdAt?: string;
 }
@@ -497,12 +497,21 @@ export const useUpdateAppointmentStatus = () => {
   return useMutation({
     mutationFn: async (payload: {
       appointmentId: string;
-      status: 'COMPLETED' | 'CANCELLED';
+      status: 'COMPLETED' | 'CANCELLED' | 'DID_NOT_DONATE';
+      reason?: string;
+      notes?: string;
     }) => {
+      const reasonText = payload.reason || payload.notes;
       try {
-        await apiClient.patch(`/appointments/${payload.appointmentId}/status`, {
-          status: payload.status,
-        });
+        await apiClient.patch(
+          `/appointments/${payload.appointmentId}/status`,
+          {
+            status: payload.status,
+            notes: reasonText,
+            reason: reasonText,
+          },
+          { timeout: 5000 }
+        );
       } catch {
         // Continue even if network is offline to update local state
       }
@@ -510,7 +519,9 @@ export const useUpdateAppointmentStatus = () => {
       try {
         const cached = JSON.parse(localStorage.getItem('ll_cached_appointments') || '[]');
         const updated = cached.map((a: any) =>
-          a.id === payload.appointmentId ? { ...a, status: payload.status } : a
+          a.id === payload.appointmentId
+            ? { ...a, status: payload.status, notes: reasonText || a.notes }
+            : a
         );
         localStorage.setItem('ll_cached_appointments', JSON.stringify(updated));
       } catch {
@@ -523,6 +534,8 @@ export const useUpdateAppointmentStatus = () => {
       queryClient.invalidateQueries({ queryKey: ['my-appointments'] });
       if (variables.status === 'COMPLETED') {
         toast.success('Donation completed! Record and certificate updated.');
+      } else if (variables.status === 'DID_NOT_DONATE') {
+        toast('Appointment recorded: Did Not Donate.', { icon: 'ℹ️' });
       } else {
         toast('Appointment cancelled.', { icon: 'ℹ️' });
       }

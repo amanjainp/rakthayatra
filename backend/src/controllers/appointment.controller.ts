@@ -66,16 +66,16 @@ export class AppointmentController {
     try {
       const userId = (req as any).user?.userId || (req as any).user?.id;
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, notes, reason } = req.body;
 
-      if (!status || !['COMPLETED', 'CANCELLED'].includes(status)) {
+      if (!status || !['COMPLETED', 'CANCELLED', 'DID_NOT_DONATE'].includes(status)) {
         return res.status(400).json({
           success: false,
-          error: 'Status must be COMPLETED or CANCELLED',
+          error: 'Status must be COMPLETED, CANCELLED, or DID_NOT_DONATE',
         });
       }
 
-      const updated = await appointmentService.updateStatus(userId, id, status);
+      const updated = await appointmentService.updateStatus(userId, id, status, notes || reason);
 
       return res.status(200).json({
         success: true,
